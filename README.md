@@ -1,4 +1,4 @@
-# cs224n-talking-gpu
+# cs224n-gpu-that-talks
 
 ## Repository for CS224n project: Attention, I'm Trying to Speak. 
 
