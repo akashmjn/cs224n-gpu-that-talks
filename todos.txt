@@ -1,0 +1,37 @@
+
+* TextEnc implementation:
+    * implement, test highway conv
+    * implement, test text_enc block
+    ? test initialization of highway conv layers
+
+* Decoder implementation:
+    * implement, test causal conv
+    * implement, test causal highway conv
+    * implement, test causal decoder F2d 
+    * implement, test causal decoder d2F 
+
+- Attention implementation:
+    * implement basic attention mechanism
+    ^ add, test guided attention loss
+
+- Training graph setup
+    - data pipeline
+    * predict_op, loss_op
+    - train_op, train/predict on batch
+    - implement reuse of variables for checkpointing / inference
+    - implement dropout, layernorm / other training tricks
+
+- Inference graph setup 
+    - implement reuse of variables 
+    - implement output feedback
+
+- Using data batches implementation
+    - train/dev data load, pre-process
+    - test block outputs with data samples
+
+- Training, checkpointing, evaluation framework
+- Logging 
+
+^ Experimentation
+    ^ modify attention with position encodings, w w/o guided attention
+    ^ multi-task learning, joint optimization
