@@ -28,7 +28,7 @@ if __name__ == '__main__':
     
                 # Write checkpoint files at every 1k steps
                 if global_step % 1000 == 0:
-                    ckp_path = os.path.join(logdir, '/model_gs_{}'.format(str(global_step // 1000).zfill(3) + "k"))
+                    ckp_path = os.path.join(params.log_dir, '/model_gs_{}'.format(str(global_step // 1000).zfill(3) + "k"))
                     logger.info('Saving model checkpoint to {}'.format(ckp_path))
                     sv.saver.save(sess, ckp_path)           
 
