@@ -1,8 +1,10 @@
 #!/usr/local/bin/python3
 
+import logging
 import tensorflow as tf
 import numpy as np
 from tensorflow.python import debug as tf_debug
+from utils import set_logger
 
 # TODO: Enable reuse of graph while loading weights etc. 
 
@@ -257,6 +259,7 @@ def AttentionBlock(KV,Q,scope='AttentionBlock'):
 
 def test_modules(mode,**kwargs):
 
+    set_logger('debug_tests.log') # logging outputs
     # test tensor shape to be fed in
     X_len = 4 
     X =  tf.placeholder(dtype=tf.float32,shape=(None,X_len,5))
@@ -273,7 +276,7 @@ def test_modules(mode,**kwargs):
         params = {"inputs":X, "filters":filters, "kernel_size":k_size,
                   "dilation_rate":dil_rate, "padding":padding,
                   "kernel_initializer":kernel_init}   
-        print("Testing conv layer with k_size:{}, dilation: {}, padding: {}, on input shape:".format(
+        logging.info("Testing conv layer with k_size:{}, dilation: {}, padding: {}, on input shape:".format(
             k_size,dil_rate,padding),X.shape.as_list())                 
         out_tensor = conv1d(**params)
 
@@ -281,35 +284,35 @@ def test_modules(mode,**kwargs):
 
         k_size, dil_rate = 3,3
         padding = 'same' if 'padding' not in kwargs else kwargs['padding']
-        print("Testing highway conv layer with k_size:{}, dilation: {}, padding: {}, on input shape:".format(
+        logging.info("Testing highway conv layer with k_size:{}, dilation: {}, padding: {}, on input shape:".format(
         k_size,dil_rate,padding),X.shape.as_list())       
         out_tensor = highway_activation_conv(X,k_size,dil_rate,padding,mode+padding)
 
     elif mode=='text_enc_block':
 
         d=2
-        print("Testing TextEncBlock with d:{}, on input shape:".format(d),
+        logging.info("Testing TextEncBlock with d:{}, on input shape:".format(d),
             X.shape.as_list())       
         out_tensor = TextEncBlock(X,d)
 
     elif mode=='audio_enc_block':
 
         d=2
-        print("Testing AudioEncBlock with d:{}, on input shape:".format(d),
+        logging.info("Testing AudioEncBlock with d:{}, on input shape:".format(d),
             X.shape.as_list())       
         out_tensor = AudioEncBlock(X,d)       
 
     elif mode=='audio_dec_block':
 
         F=4
-        print("Testing AudioDecBlock with F:{}, on input shape:".format(F),
+        logging.info("Testing AudioDecBlock with F:{}, on input shape:".format(F),
             X.shape.as_list())       
         _ , out_tensor = AudioDecBlock(X,F)              
 
     elif mode=='attention_block':
 
         d=2
-        print("Testing AttentionBlock with d:{}, on input shape:".format(d),
+        logging.info("Testing AttentionBlock with d:{}, on input shape:".format(d),
             X.shape.as_list())       
         KV = TextEncBlock(X,d)
         Q = AudioEncBlock(X,d)       
@@ -318,9 +321,9 @@ def test_modules(mode,**kwargs):
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         out_np = sess.run(out_tensor,{X:X_feed})
-    print("Output (shape: {}) generated:".format(out_np.shape))
+    logging.info("Output (shape: {}) generated:".format(out_np.shape))
     np.set_printoptions(precision=3)
-    print(out_np)       
+    logging.info(out_np)       
 
 
 if __name__=="__main__":
