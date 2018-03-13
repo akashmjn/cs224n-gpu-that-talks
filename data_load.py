@@ -108,7 +108,7 @@ def get_batch(params,mode='train'):
                                             tensors=[text, mel, mag, fname],
                                             batch_size=params.batch_size,
                                             bucket_boundaries=[i for i in range(minlen + 1, maxlen - 1, 20)],
-                                            num_threads=8,
+                                            num_threads=params.num_threads,
                                             capacity=params.batch_size*4,
                                             dynamic_pad=True)
 
