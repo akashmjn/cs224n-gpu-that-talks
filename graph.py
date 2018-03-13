@@ -76,7 +76,7 @@ class ModelGraph(object):
         tf.summary.image('train/mel_target', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
         tf.summary.image('train/mel_hat', tf.expand_dims(tf.transpose(self.Yhat[:1], [0, 2, 1]), -1))
         tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
-        tf.summary.histogram('train/Yhat',self.Ylogit)
+        tf.summary.histogram('train/Ylogit',self.Ylogit)
     
         return self.Ylogit, self.Yhat
     
