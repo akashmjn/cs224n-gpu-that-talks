@@ -23,8 +23,8 @@ if __name__ == '__main__':
                                                                             g.loss, g.L1_loss, g.CE_loss])
     
                 if global_step % 50==0:
-                    logger.info('Final loss at step {}: {:.2f}, L1: {:.2f}, CE: {:.2f}, \
-                        with output shape: {}'.format(global_step,loss_out, L1_out, CE_out, Y_out.shape))
+                    logger.info('Training loss at step {}: {:.2f}, L1: {:.2f}, CE: {:.2f}'.format(
+                        global_step,loss_out, L1_out, CE_out))
     
                 # Write checkpoint files at every 1k steps
                 if global_step % 1000 == 0:
