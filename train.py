@@ -2,7 +2,7 @@
 
 import argparse
 import logging
-import os
+import os,sys
 
 import tensorflow as tf
 from tqdm import tqdm
@@ -11,7 +11,9 @@ from utils import Params
 
 if __name__ == '__main__':
 
-    params = Params('./runs/default/params.json')
+    params_path = sys.argv[1]
+    params = Params(params_path)
+    print('Running a training run with params from: {}'.format(params_path))
     g = ModelGraph(params)
     logger = g.logger
     sv = tf.train.Supervisor(logdir=params.log_dir, save_model_secs=0, global_step=g.global_step)
@@ -28,7 +30,7 @@ if __name__ == '__main__':
     
                 # Write checkpoint files at every 1k steps
                 if global_step % 1000 == 0:
-                    ckp_path = os.path.join(params.log_dir, '/model_gs_{}'.format(str(global_step // 1000).zfill(3) + "k"))
+                    ckp_path = os.path.join(params.log_dir, 'model_gs_{}'.format(str(global_step // 1000).zfill(3) + "k"))
                     logger.info('Saving model checkpoint to {}'.format(ckp_path))
                     sv.saver.save(sess, ckp_path)           
 

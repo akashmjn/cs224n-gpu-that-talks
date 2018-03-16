@@ -77,6 +77,7 @@ class ModelGraph(object):
         tf.summary.image('train/mel_hat', tf.expand_dims(tf.transpose(self.Yhat[:1], [0, 2, 1]), -1))
         tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
         tf.summary.histogram('train/Ylogit',self.Ylogit)
+        tf.summary.histogram('train/Yhat',self.Yhat)
     
         return self.Ylogit, self.Yhat
     
@@ -87,11 +88,12 @@ class ModelGraph(object):
         assert len(self.L1_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.L1_loss.shape)
         self.CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y,logits=self.Ylogit))
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
-        self.loss = self.L1_loss + self.CE_loss
+        self.loss = self.params.l1_loss_weight*self.L1_loss + self.CE_loss
 
         tf.summary.scalar('train/L1_loss',self.L1_loss)
         tf.summary.scalar('train/CE_loss',self.CE_loss)
         tf.summary.scalar('train/total_loss',self.loss)
+        tf.summary.histogram('train/Y',self.Y)
     
         return self.loss, self.L1_loss, self.CE_loss
 

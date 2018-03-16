@@ -107,9 +107,9 @@ def get_batch(params,mode='train'):
                                             input_length=text_length,
                                             tensors=[text, mel, mag, fname],
                                             batch_size=params.batch_size,
-                                            bucket_boundaries=[i for i in range(minlen + 1, maxlen - 1, 20)],
+                                            bucket_boundaries=[i for i in range(minlen + 1, maxlen - 1, params.num_buckets)],
                                             num_threads=params.num_threads,
-                                            capacity=params.batch_size*4,
+                                            capacity=params.batch_size*params.Qbatch,
                                             dynamic_pad=True)
 
     return texts, mels, mags, fnames, num_batch
