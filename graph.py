@@ -27,7 +27,7 @@ class ModelGraph(object):
 
         # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
         if 'train' in mode: 
-            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,'train_ssrn')
+            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,'train_ssrn',self.logger)
         if mode=='train_text2mel':
             self.build_text2mel(mode=mode,reuse=None) # TODO: Toggle for inference, maybe look at combined training?
         elif mode=='train_ssrn':

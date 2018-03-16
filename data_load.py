@@ -67,12 +67,13 @@ def load_data(params,mode="train"):
             texts[i, :len(sent)] = [char2idx[char] for char in sent]
         return texts
 
-def get_batch(params,mode):
+def get_batch(params,mode,logger):
     """Loads training data and put them in queues"""
     
     with tf.device('/cpu:0'):
         # Load data
         file_mode = 'train' if 'train' in mode else 'synthesize'
+        logger.info('Loading in filenames from load_data with mode: {}'.format(file_mode))
         fpaths, text_lengths, texts = load_data(params,file_mode) # list
         maxlen, minlen = max(text_lengths), min(text_lengths)
 
@@ -81,6 +82,7 @@ def get_batch(params,mode):
 
         # Create Queues
         fpath, text_length, text = tf.train.slice_input_producer([fpaths, text_lengths, texts], shuffle=True)
+        logger.info('Created input queues for data, total num_batch: {}'.format(num_batch))
 
         # Parse
         text = tf.decode_raw(text, tf.int32)  # (None,)
@@ -96,6 +98,7 @@ def get_batch(params,mode):
         else:
             parse_func = lambda path: load_spectrograms(path,params,mode)
             fname, mel, mag = tf.py_func(parse_func, [fpath], [tf.string, tf.float32, tf.float32])  # (None, F)
+            logger.info('Defined load_spectrograms op with mode: {}'.format(mode))
 
         # Add shape information
         fname.set_shape(())
@@ -112,6 +115,8 @@ def get_batch(params,mode):
                                             num_threads=params.num_threads,
                                             capacity=params.batch_size*params.Qbatch,
                                             dynamic_pad=True)
+        logger.info('Created {} bucketed queues, batch_size: {}, capacity: {}'.format(params.num_buckets,
+            params.batch_size,params.batch_size*params.Qbatch))
 
     return texts, mels, mags, fnames, num_batch
 
