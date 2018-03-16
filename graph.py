@@ -41,6 +41,12 @@ class ModelGraph(object):
         """
         self.logger.info('Building training graph for SSRN')
         self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse)
+
+        tf.summary.image('train/mag_target', tf.expand_dims(tf.transpose(self.Z[:1], [0, 2, 1]), -1))
+        tf.summary.image('train/mag_hat', tf.expand_dims(tf.transpose(self.Zhat[:1], [0, 2, 1]), -1))
+        tf.summary.image('train/mel_inp', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
+        tf.summary.histogram('train/Zhat',self.Zhat)
+
         self.add_loss_op(mode='ssrn')
         self.add_train_op()
 
