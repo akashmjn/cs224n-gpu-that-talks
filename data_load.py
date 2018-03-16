@@ -67,12 +67,13 @@ def load_data(params,mode="train"):
             texts[i, :len(sent)] = [char2idx[char] for char in sent]
         return texts
 
-def get_batch(params,mode='train'):
+def get_batch(params,mode):
     """Loads training data and put them in queues"""
     
     with tf.device('/cpu:0'):
         # Load data
-        fpaths, text_lengths, texts = load_data(params,mode) # list
+        file_mode = 'train' if 'train' in mode else 'synthesize'
+        fpaths, text_lengths, texts = load_data(params,file_mode) # list
         maxlen, minlen = max(text_lengths), min(text_lengths)
 
         # Calc total batch count
@@ -93,7 +94,7 @@ def get_batch(params,mode='train'):
 
             fname, mel, mag = tf.py_func(_load_spectrograms, [fpath], [tf.string, tf.float32, tf.float32])
         else:
-            parse_func = lambda path: load_spectrograms(path,params)
+            parse_func = lambda path: load_spectrograms(path,params,mode)
             fname, mel, mag = tf.py_func(parse_func, [fpath], [tf.string, tf.float32, tf.float32])  # (None, F)
 
         # Add shape information

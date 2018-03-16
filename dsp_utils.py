@@ -20,12 +20,17 @@ import pdb
 
 ######## Audio to spectrogram, and inversion functions #######
 
-def load_spectrograms(fpath,params):
-    '''Read the wave file in `fpath`
-    and extracts spectrograms'''
+def load_spectrograms(fpath,params,mode):
+    """
+    Read the wave file in `fpath` and extracts downsampled mel-scale, and 
+    linear scale log magnitude spectrograms that are normalized. 
+    Mel is downsampled in time to T/params.reduction_factor=4, where T is
+    the length of the full spectrogram. 
+    Based on mode - for 'train_ssrn' - it loads upto a fixed-size random sample from the file 
+    """
 
     fname = os.path.basename(fpath)
-    mel, mag = get_spectrograms(fpath,params)
+    mel, mag = get_spectrograms(fpath,params,mode)
     t = mel.shape[0]
 
     # Marginal padding for reduction shape sync.
@@ -37,12 +42,13 @@ def load_spectrograms(fpath,params):
     mel = mel[::params.reduction_factor, :]
     return fname, mel, mag
 
-def get_spectrograms(fpath,params):
+def get_spectrograms(fpath,params,mode):
     '''Parse the wave file in `fpath` and
-    Returns normalized melspectrogram and linear spectrogram.
+    Returns normalized log magnitude melspectrogram and linear scale spectrogram.
 
     Args:
       fpath: A string. The full path of a sound file.
+      mode: if 'train_ssrn' does not process full audio file, only a random patch to speec up computation
 
     Returns:
       mel: A 2d array of shape (T, F) and dtype of float32.
@@ -53,6 +59,16 @@ def get_spectrograms(fpath,params):
 
     # Trimming
     y, _ = librosa.effects.trim(y)
+
+    # If training SSRN, only use a smaller random patch of the data 
+    # that produces params.ssrn_T number of frames
+    if mode=='train_ssrn':
+        n, sample_len = len(y), params.ssrn_T*(params.hop_length-1)
+        if sample_len >= n: # in case of clips smaller than threshold
+            y = np.concatenate([y,np.zeros(sample_len-n)]) # pad with zeros
+        else:
+            idx = np.random.choice(n-sample_len)
+            y = y[idx:idx+sample_len] # random chunk of input signal
 
     # Preemphasis
     y = np.append(y[0], y[1:] - params.pre_emphasis * y[:-1]) 
