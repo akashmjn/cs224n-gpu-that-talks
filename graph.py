@@ -27,14 +27,14 @@ class ModelGraph(object):
 
         # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
         if 'train' in mode: 
-            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,'train')
+            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,'train_ssrn')
         if mode=='train_text2mel':
-            self.build_text2mel(mode='train',reuse=None) # TODO: Toggle for inference, maybe look at combined training?
+            self.build_text2mel(mode=mode,reuse=None) # TODO: Toggle for inference, maybe look at combined training?
         elif mode=='train_ssrn':
-            self.build_ssrn(reuse=None)
+            self.build_ssrn(mode,reuse=None)
         tf.summary.merge_all()
 
-    def build_ssrn(self,reuse=None):
+    def build_ssrn(self,mode,reuse=None):
         """
         Creates graph for the SSRN model for either training or inference
         During training, for now takes true mels Y as input with target as the true mag Z
@@ -47,19 +47,19 @@ class ModelGraph(object):
         tf.summary.image('train/mel_inp', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
         tf.summary.histogram('train/Zhat',self.Zhat)
 
-        self.add_loss_op(mode='ssrn')
+        self.add_loss_op(mode)
         self.add_train_op()
 
-    def build_text2mel(self,mode='train',reuse=None):
+    def build_text2mel(self,mode,reuse=None):
         """
         Creates graph for either training or inference
         """
-        if mode=='train':
+        if mode=='train_text2mel':
             self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input is one-prev-shifted target input) 
             self.logger.info('Initialized input character embeddings with dim: {}'.format(self.S.shape))
             self.add_input_embeddings(reuse)
             self.add_predict_op(reuse)
-            self.add_loss_op(mode='text2mel')
+            self.add_loss_op(mode)
             self.add_train_op()
 
     def add_input_embeddings(self,reuse=None):
@@ -103,9 +103,9 @@ class ModelGraph(object):
     
     def add_loss_op(self,mode):
     
-        if mode=='ssrn':
+        if mode=='train_ssrn':
             target, pred, logit, sumlabel = self.Z, self.Zhat, self.Zlogit, 'train/Z'
-        elif mode=='text2mel':
+        elif mode=='train_text2mel':
             target, pred, logit, sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
 
         # compute loss (without guided attention loss for now)
