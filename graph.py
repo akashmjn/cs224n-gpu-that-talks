@@ -6,7 +6,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python import debug as tf_debug
 
-from model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock
+from model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
 from utils import set_logger, Params, learning_rate_decay
 from data_load import load_data, get_batch
 
@@ -18,15 +18,33 @@ class ModelGraph(object):
     # initialize character embeddings
     # build graph 
     """
-    def __init__(self,params,mode='train'):
+    def __init__(self,params,mode):
         self.params = params
-        self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode)
         self.logger = set_logger(os.path.join(self.params.log_dir,
                                     self.params.model_name+'_'+mode+'.log') ) # sets path for logging
-        # TODO: conditionally call this
-        self.build(mode,reuse=None)
+        with tf.variable_scope("gs"): # global step variable to track batch updates
+            self.global_step = tf.Variable(0, name='global_step', trainable=False)                  
 
-    def build(self,mode='train',reuse=None):
+        # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
+        if 'train' in mode: 
+            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,'train')
+        if mode=='train_text2mel':
+            self.build_text2mel(mode='train',reuse=None) # TODO: Toggle for inference, maybe look at combined training?
+        elif mode=='train_ssrn':
+            self.build_ssrn(reuse=None)
+        tf.summary.merge_all()
+
+    def build_ssrn(self,reuse=None):
+        """
+        Creates graph for the SSRN model for either training or inference
+        During training, for now takes true mels Y as input with target as the true mag Z
+        """
+        self.logger.info('Building training graph for SSRN')
+        self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse)
+        self.add_loss_op(mode='ssrn')
+        self.add_train_op()
+
+    def build_text2mel(self,mode='train',reuse=None):
         """
         Creates graph for either training or inference
         """
@@ -35,12 +53,8 @@ class ModelGraph(object):
             self.logger.info('Initialized input character embeddings with dim: {}'.format(self.S.shape))
             self.add_input_embeddings(reuse)
             self.add_predict_op(reuse)
-            self.add_loss_op()
-            with tf.variable_scope("gs"): # global step variable to track batch updates
-                self.global_step = tf.Variable(0, name='global_step', trainable=False)           
+            self.add_loss_op(mode='text2mel')
             self.add_train_op()
-
-        tf.summary.merge_all()
 
     def add_input_embeddings(self,reuse=None):
         """
@@ -81,19 +95,24 @@ class ModelGraph(object):
     
         return self.Ylogit, self.Yhat
     
-    def add_loss_op(self):
+    def add_loss_op(self,mode):
     
+        if mode=='ssrn':
+            target, pred, logit, sumlabel = self.Z, self.Zhat, self.Zlogit, 'train/Z'
+        elif mode=='text2mel':
+            target, pred, logit, sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
+
         # compute loss (without guided attention loss for now)
-        self.L1_loss = tf.reduce_mean(tf.abs(self.Y-self.Yhat))
+        self.L1_loss = tf.reduce_mean(tf.abs(target-pred))
         assert len(self.L1_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.L1_loss.shape)
-        self.CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y,logits=self.Ylogit))
+        self.CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=target,logits=logit))
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
         self.loss = self.params.l1_loss_weight*self.L1_loss + self.CE_loss
 
         tf.summary.scalar('train/L1_loss',self.L1_loss)
         tf.summary.scalar('train/CE_loss',self.CE_loss)
         tf.summary.scalar('train/total_loss',self.loss)
-        tf.summary.histogram('train/Y',self.Y)
+        tf.summary.histogram(sumlabel,target)
     
         return self.loss, self.L1_loss, self.CE_loss
 
@@ -124,7 +143,7 @@ class ModelGraph(object):
 
 def test_graph_setup(mode='placeholder'):
 
-    assert mode in ['placeholder','data_load']
+    assert mode in ['placeholder']
 
     if mode=='placeholder':
         logger = set_logger('debug_tests.log') # logger output 
@@ -141,7 +160,7 @@ def test_graph_setup(mode='placeholder'):
         Y_feed[:,5,:] = 10    
     
         Ylogit, Yhat = add_predict_op(L,S,d,F)
-        loss, L1_loss, CE_loss = add_loss_op(Y,Ylogit,Yhat)
+        loss, L1_loss, CE_loss = add_loss_op(Y,Ylogit,Yhat,'text2mel')
     
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -161,4 +180,4 @@ if __name__ == '__main__':
     # fpaths, text_lengths, texts = load_data(params)
     # texts, mels, mags, fnames, num_batch = get_batch(params)
     tf.logging.set_verbosity(tf.logging.DEBUG)
-    test_graph_setup('data_load')
+    test_graph_setup('placeholder')

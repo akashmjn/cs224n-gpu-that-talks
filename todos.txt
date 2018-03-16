@@ -15,6 +15,10 @@
     ^ add, test guided attention loss
 
 - SSRN implementation:
+    * implement, test transposed convolution
+    * implement full SSRN module
+    * modify build graph
+    - modify data pipeline for faster patch-based training 
 
 - Test full pipeline with kyubyong data loading + 230 training framework
     * predict_op, loss_op
@@ -35,5 +39,7 @@
 ^ Experimentation
     ^ modify attention with position encodings, w w/o guided attention
     ^ multi-task learning, joint optimization
+
+
 
 - Edit to use tf.data pipeline
