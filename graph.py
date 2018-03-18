@@ -19,6 +19,14 @@ class ModelGraph(object):
     # build graph 
     """
     def __init__(self,params,mode):
+        """
+        Builds out the model graph in different modes depending on inference, or training 
+        different parts of the model. 
+
+        Args:
+            params (utils.Params): Object containing various hyperparams for building model graph
+            mode (str): Either of 'train_text2mel', 'train_ssrn', or 'synthesize'
+        """
         self.params = params
         self.logger = set_logger(os.path.join(self.params.log_dir,
                                     self.params.model_name+'_'+mode+'.log') ) # sets path for logging
@@ -27,10 +35,10 @@ class ModelGraph(object):
 
         # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
         if 'train' in mode: 
-            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,'train_ssrn',self.logger)
-        if mode=='train_text2mel':
-            self.build_text2mel(mode=mode,reuse=None) # TODO: Toggle for inference, maybe look at combined training?
-        elif mode=='train_ssrn':
+            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode,self.logger)
+        if mode in ['train_text2mel','synthesize']:
+            self.build_text2mel(mode=mode,reuse=None) # TODO: maybe look at combined training?
+        if mode in ['train_ssrn','synthesize']:
             self.build_ssrn(mode,reuse=None)
         tf.summary.merge_all()
 
@@ -39,26 +47,40 @@ class ModelGraph(object):
         Creates graph for the SSRN model for either training or inference
         During training, for now takes true mels Y as input with target as the true mag Z
         """
-        self.logger.info('Building training graph for SSRN')
-        self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse)
+        assert mode in ['train_ssrn','synthesize']
+        self.logger.info('Building training graph for SSRN ...')
 
-        tf.summary.image('train/mag_target', tf.expand_dims(tf.transpose(self.Z[:1], [0, 2, 1]), -1))
-        tf.summary.image('train/mag_hat', tf.expand_dims(tf.transpose(self.Zhat[:1], [0, 2, 1]), -1))
-        tf.summary.image('train/mel_inp', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
-        tf.summary.histogram('train/Zhat',self.Zhat)
-
-        self.add_loss_op(mode)
-        self.add_train_op()
+        if mode=='train_ssrn':
+            self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse) # input, labels: true mels, mags
+            self.add_loss_op(mode)
+            self.add_train_op()
+            tf.summary.image('train/mag_target', tf.expand_dims(tf.transpose(self.Z[:1], [0, 2, 1]), -1))
+            tf.summary.image('train/mag_hat', tf.expand_dims(tf.transpose(self.Zhat[:1], [0, 2, 1]), -1))
+            tf.summary.image('train/mel_inp', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
+            tf.summary.histogram('train/Zhat',self.Zhat)           
+        elif mode=='synthesize':
+            self.Zlogit, self.Zhat = SSRNBlock(self.Yhat,self.params.c,self.params.Fo,reuse=reuse) # input: generated mels
 
     def build_text2mel(self,mode,reuse=None):
         """
-        Creates graph for either training or inference
+        Creates graph for either training or inference. During training, one-previous shifted targets 
+        are used as the feedback input S. During inference (synthesis) a variable time-length input 
+        consisting of mel frames generated so far is used as input.  
         """
+        assert mode in ['train_text2mel','synthesize']
+        # building training graph for Text2Mel
+        self.logger.info('Building training graph for Text2Mel ...')       
+
         if mode=='train_text2mel':
-            self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input is one-prev-shifted target input) 
-            self.logger.info('Initialized input character embeddings with dim: {}'.format(self.S.shape))
-            self.add_input_embeddings(reuse)
-            self.add_predict_op(reuse)
+            self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
+        elif mode=='synthesize':
+            self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
+            self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
+
+        self.logger.info('Initialized input character embeddings with dim: {}'.format(self.S.shape))
+        self.add_input_embeddings(reuse)
+        self.add_predict_op(reuse)
+        if mode=='train_text2mel':
             self.add_loss_op(mode)
             self.add_train_op()
 
@@ -80,8 +102,6 @@ class ModelGraph(object):
     
     def add_predict_op(self,reuse=None):
         
-        # building training graph for Text2Mel
-        self.logger.info('Building training graph for Text2Mel')
         self.KV = TextEncBlock(self.L,self.params.d)
         self.logger.info('Encoded KV with dim: {}'.format(self.KV.shape))
         self.Q = AudioEncBlock(self.S,self.params.d)
@@ -92,12 +112,6 @@ class ModelGraph(object):
         self.logger.info('Concatenated RQ with dim: {}'.format(self.RQ.shape))
         self.Ylogit, self.Yhat = AudioDecBlock(self.RQ,self.params.F)
         self.logger.info('Decoded Yhat with dim: {}'.format(self.Yhat.shape))
-
-        tf.summary.image('train/mel_target', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
-        tf.summary.image('train/mel_hat', tf.expand_dims(tf.transpose(self.Yhat[:1], [0, 2, 1]), -1))
-        tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
-        tf.summary.histogram('train/Ylogit',self.Ylogit)
-        tf.summary.histogram('train/Yhat',self.Yhat)
     
         return self.Ylogit, self.Yhat
     
@@ -115,6 +129,11 @@ class ModelGraph(object):
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
         self.loss = self.params.l1_loss_weight*self.L1_loss + self.CE_loss
 
+        tf.summary.image('train/mel_target', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
+        tf.summary.image('train/mel_hat', tf.expand_dims(tf.transpose(self.Yhat[:1], [0, 2, 1]), -1))
+        tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
+        tf.summary.histogram('train/Ylogit',self.Ylogit)
+        tf.summary.histogram('train/Yhat',self.Yhat)
         tf.summary.scalar('train/L1_loss',self.L1_loss)
         tf.summary.scalar('train/CE_loss',self.CE_loss)
         tf.summary.scalar('train/total_loss',self.loss)

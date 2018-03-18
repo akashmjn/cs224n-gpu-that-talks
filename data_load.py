@@ -20,11 +20,29 @@ import unicodedata
 import pdb
 
 def load_vocab(params):
+    """
+    Returns two dicts for lookup from char2idx and idx2char using params.vocab
+
+    Args:
+        params (utils.Params): Object containing various hyperparams
+    Returns:
+        char2idx (dict): From char to int indexes in the vocab
+        idx2char (dict): From indexes in the vocab to char
+    """
     char2idx = {char: idx for idx, char in enumerate(params.vocab)}
     idx2char = {idx: char for idx, char in enumerate(params.vocab)}
     return char2idx, idx2char
 
 def text_normalize(text,params):
+    """
+    Normalizes an input string based on params.vocab 
+    
+    Args:
+        text (str): Input text 
+        params (utils.Params): Object containing various hyperparams
+    Returns:
+        text (str): Normalized text based on params.vocab
+    """
     text = ''.join(char for char in unicodedata.normalize('NFD', text)
                            if unicodedata.category(char) != 'Mn') # Strip accents
 
@@ -61,8 +79,9 @@ def load_data(params,mode="train"):
         # Parse
         lines = codecs.open(params.test_data, 'r', 'utf-8').readlines()[1:]
         sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
-        print("Generating for sentences: {}".format(sents))
-        texts = np.zeros((len(sents), params.max_N), np.int32)
+        print("Loading test sentences: {}".format(sents))
+        max_len = max([len(sent) for sent in sents])
+        texts = np.zeros((len(sents), max_len), np.int32)
         for i, sent in enumerate(sents):
             texts[i, :len(sent)] = [char2idx[char] for char in sent]
         return texts

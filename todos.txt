@@ -14,27 +14,22 @@
     * implement basic attention mechanism
     ^ add, test guided attention loss
 
-- SSRN implementation:
+* SSRN implementation:
     * implement, test transposed convolution
     * implement full SSRN module
     * modify build graph
-    - modify data pipeline for faster patch-based training 
+    * modify data pipeline for faster patch-based training 
 
-- Test full pipeline with kyubyong data loading + 230 training framework
+* Test full data pipeline with kyubyong loaders + 230 training framework
     * predict_op, loss_op
     * train_op, train/predict on batch
-    - implement dropout, layernorm / other training tricks
+    * training, checkpointing, evaluation framework
+    - train/dev data load
 
-- Using data batches implementation
-    - train/dev data load, pre-process
-    * test block outputs with data samples
+* Inference/Synthesis graph 
+    * implement restoring of variables 
+    * implement output feedback
 
-- Inference graph setup 
-    - implement reuse of variables 
-    - implement output feedback
-
-- Training, checkpointing, evaluation framework
-- Logging 
 
 ^ Experimentation
     ^ modify attention with position encodings, w w/o guided attention
@@ -43,3 +38,4 @@
 
 
 - Edit to use tf.data pipeline
+- implement dropout, layernorm / other training tricks

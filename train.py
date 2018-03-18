@@ -1,3 +1,5 @@
+#!/usr/local/bin/python3
+
 """Train the model"""
 
 import argparse

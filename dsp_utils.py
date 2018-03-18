@@ -105,7 +105,7 @@ def spectrogram2wav(mag,params):
 
     Args:
       mag (np.ndarray): A numpy array of (T, 1+n_fft//2) with values from 0-1
-      mode (str): Indicates whether linear magnitude or in log magnitude
+      params (utils.Params): Object containing various hyperparams
 
     Returns:
       wav: A 1-D numpy array.
