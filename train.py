@@ -16,6 +16,7 @@ if __name__ == '__main__':
     params_path = sys.argv[1]
     params = Params(params_path)
     print('Running a training run with params from: {}'.format(params_path))
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # default use single GPU
     g = ModelGraph(params,'train_text2mel')
     logger = g.logger
     sv = tf.train.Supervisor(logdir=params.log_dir, save_model_secs=0, global_step=g.global_step)

@@ -126,15 +126,16 @@ def get_batch(params,mode,logger):
         mag.set_shape((None, params.n_fft//2+1))
 
         # Batching
+        bucket_sizes = [i for i in range(minlen + 1, maxlen - 1, (maxlen-minlen)//params.num_buckets)]
         _, (texts, mels, mags, fnames) = tf.contrib.training.bucket_by_sequence_length(
                                             input_length=text_length,
                                             tensors=[text, mel, mag, fname],
                                             batch_size=params.batch_size,
-                                            bucket_boundaries=[i for i in range(minlen + 1, maxlen - 1, params.num_buckets)],
+                                            bucket_boundaries=bucket_sizes,
                                             num_threads=params.num_threads,
                                             capacity=params.batch_size*params.Qbatch,
                                             dynamic_pad=True)
-        logger.info('Created {} bucketed queues, batch_size: {}, capacity: {}'.format(params.num_buckets,
+        logger.info('Created {} bucketed queues from min/max len {}/{}, batch_size: {}, capacity: {}'.format(params.num_buckets,minlen,maxlen,
             params.batch_size,params.batch_size*params.Qbatch))
 
     return texts, mels, mags, fnames, num_batch
