@@ -112,12 +112,12 @@ def plot_alignment(alignment, gs, params):
     plt.savefig('{}/alignment_{}.png'.format(dir, gs), format='png')       
 
 
-def guided_attention(g=0.2):
+def guided_attention(params,g=0.2):
     '''Guided attention. Refer to page 3 on the paper.'''
-    W = np.zeros((hp.max_N, hp.max_T), dtype=np.float32)
+    W = np.zeros((params.max_N, params.max_T), dtype=np.float32)
     for n_pos in range(W.shape[0]):
         for t_pos in range(W.shape[1]):
-            W[n_pos, t_pos] = 1 - np.exp(-(t_pos / float(hp.max_T) - n_pos / float(hp.max_N)) ** 2 / (2 * g * g))
+            W[n_pos, t_pos] = 1 - np.exp(-(t_pos / float(params.max_T) - n_pos / float(params.max_N)) ** 2 / (2 * g * g))
     return W
 
 def learning_rate_decay(params, global_step):

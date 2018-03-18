@@ -7,7 +7,7 @@ import numpy as np
 from tensorflow.python import debug as tf_debug
 
 from model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
-from utils import set_logger, Params, learning_rate_decay
+from utils import set_logger, Params, learning_rate_decay, guided_attention
 from data_load import load_data, get_batch
 
 
@@ -128,6 +128,18 @@ class ModelGraph(object):
         self.CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=target,logits=logit))
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
         self.loss = self.params.l1_loss_weight*self.L1_loss + self.CE_loss
+
+        # guided attention loss from Tachibana et. al (2017)
+        if self.params.attention_mode =='guided':
+            # A (shape: batch_size, N, T) - these dimensions are fixed for a single padded batch
+            N, T = tf.cast(tf.shape(self.A)[1],tf.float32), tf.cast(tf.shape(self.A)[2],tf.float32)
+            W = tf.fill(tf.shape(self.A),0.0) # weight matrix to be multiplied with A
+            W = W + tf.expand_dims(tf.range(N),1)/N - tf.expand_dims(tf.range(T),0)/T # using broadcasting for mat + col - row
+            self.W_att = 1.0 - tf.exp(-tf.square(W)/(2*0.2)**2) # using g=0.2 from paper
+            self.att_loss = tf.reduce_mean(tf.multiply(self.A,self.W_att))
+            tf.summary.scalar('train/att_loss',self.att_loss)
+            self.loss = self.loss + self.att_loss
+            self.logger.info('Added guided attention loss over A: {}'.format(self.A))
 
         tf.summary.image('train/mel_target', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
         tf.summary.image('train/mel_hat', tf.expand_dims(tf.transpose(self.Yhat[:1], [0, 2, 1]), -1))
