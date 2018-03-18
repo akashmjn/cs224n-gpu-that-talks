@@ -77,8 +77,8 @@ class ModelGraph(object):
             self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
             self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
 
-        self.logger.info('Initialized input character embeddings with dim: {}'.format(self.S.shape))
         self.add_input_embeddings(reuse)
+        self.logger.info('Initialized input character embeddings with dim: {}'.format(self.L.shape))
         self.add_predict_op(reuse)
         if mode=='train_text2mel':
             self.add_loss_op(mode)
@@ -92,7 +92,9 @@ class ModelGraph(object):
             L (tf.tensor): tf.float32 tensor obtained after looking up embeddings (shape: batch_size, N, e) 
         """
         with tf.variable_scope('InputEmbeddings',reuse=reuse):
-            vocab_size, e = len(self.params.vocab), self.params.e
+            # from Gehring et. al (2017), sizing e the same as d if input embedding is to be added
+            e = self.params.d if self.params.local_encoding else self.params.e
+            vocab_size = len(self.params.vocab)
             # TODO: Add ability to make padding embedding zero
             embedding_mat = tf.get_variable(name='char_embeddings',shape=[vocab_size,e],
                 dtype=tf.float32,trainable=True)
@@ -102,11 +104,13 @@ class ModelGraph(object):
     
     def add_predict_op(self,reuse=None):
         
-        self.KV = TextEncBlock(self.L,self.params.d)
-        self.logger.info('Encoded KV with dim: {}'.format(self.KV.shape))
+        self.K, self.V = TextEncBlock(self.L,self.params.d)
+        if self.params.local_encoding:            # as in Gehring et. al (2017) uses input embedding L in value
+            self.V = tf.sqrt(0.5)*(self.L+self.V) # weighted sum with V, L 
+        self.logger.info('Encoded K, V with dim: {}'.format(self.K.shape))
         self.Q = AudioEncBlock(self.S,self.params.d)
         self.logger.info('Encoded Q with dim: {}'.format(self.Q.shape))
-        self.A , self.R = AttentionBlock(self.KV, self.Q)
+        self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
         self.logger.info('Encoded R with dim: {}'.format(self.R.shape))
         self.RQ = tf.concat([self.R, self.Q],axis=2)
         self.logger.info('Concatenated RQ with dim: {}'.format(self.RQ.shape))

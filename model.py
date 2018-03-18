@@ -167,7 +167,7 @@ def TextEncBlock(L,d,scope="TextEncBlock"):
         scope (str): variable scope
 
     Returns:
-        KV (tf.tensor): Concatenated tensor of blocks V,K (shape: batch_size, N, 2*d)
+        KV (tf.tensor): Concatenated tensor of blocks K, V (shape: batch_size, N, 2*d)
     """
     e = L.shape.as_list()[2]
 
@@ -188,7 +188,7 @@ def TextEncBlock(L,d,scope="TextEncBlock"):
             L5_HC3_1 = highway_activation_conv(L4_HC2_2,kernel_size=1,scope="HC1")
             KV = highway_activation_conv(L5_HC3_1,kernel_size=1,scope="HC2")
 
-    return KV 
+    return KV[:,:,:d], KV[:,:,d:] # key, value
 
 
 def AudioEncBlock(S,d,scope="AudioEncBlock"):
@@ -272,7 +272,7 @@ def AudioDecBlock(RQ,F,scope='AudioDecBlock'):
     return Ylogit, Yhat
 
 
-def AttentionBlock(KV,Q,scope='AttentionBlock'):
+def AttentionBlock(K,V,Q,scope='AttentionBlock'):
     """
     Implements a scaled key-value dot product attention mechanism as in Tachibana et. al (2017)
 
@@ -287,7 +287,7 @@ def AttentionBlock(KV,Q,scope='AttentionBlock'):
 
     # TODO: Add a variable scope here
     d = Q.shape.as_list()[2]
-    K,V = KV[:,:,:d], KV[:,:,d:] # splitting out into blocks
+    # K,V = KV[:,:,:d], KV[:,:,d:] # splitting out into blocks
 
     # TODO: Add guided attention loss computation
     A = tf.nn.softmax(tf.matmul(Q,
