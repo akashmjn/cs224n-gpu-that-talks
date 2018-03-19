@@ -127,3 +127,48 @@ def learning_rate_decay(params, global_step):
     step = tf.to_float(global_step + 1)
     return init_lr * warmup_steps**0.5 * tf.minimum(step * warmup_steps**-1.5, step**-0.5)
 
+"""
+Referenced from: https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
+"""
+
+def get_timing_signal_1d(length,
+                         channels,
+                         position_rate=1.0,
+                         min_timescale=1.0,
+                         max_timescale=1.0e4):
+  """Gets a bunch of sinusoids of different frequencies.
+  Each channel of the input Tensor is incremented by a sinusoid of a different
+  frequency and phase.
+  This allows attention to learn to use absolute and relative positions.
+  Timing signals should be added to some precursors of both the query and the
+  memory inputs to attention.
+  The use of relative position is possible because sin(x+y) and cos(x+y) can be
+  experessed in terms of y, sin(x) and cos(x).
+  In particular, we use a geometric sequence of timescales starting with
+  min_timescale and ending with max_timescale.  The number of different
+  timescales is equal to channels / 2. For each timescale, we
+  generate the two sinusoidal signals sin(timestep/timescale) and
+  cos(timestep/timescale).  All of these sinusoids are concatenated in
+  the channels dimension.
+  Args:
+    length: scalar, length of timing signal sequence.
+    channels: scalar, size of timing embeddings to create. The number of
+        different timescales is equal to channels / 2.
+    position_rate: float, used as sin(w_s*timestep/timescale)
+    min_timescale: a float
+    max_timescale: a float
+  Returns:
+    a Tensor of timing signals [1, length, channels]
+  """
+  position = tf.to_float(tf.range(length))
+  num_timescales = channels // 2
+  log_timescale_increment = (
+      np.log(float(max_timescale) / float(min_timescale)) /
+      (tf.to_float(num_timescales) - 1))
+  inv_timescales = min_timescale * tf.exp(
+      tf.to_float(tf.range(num_timescales)) * -log_timescale_increment)
+  scaled_time = tf.expand_dims(position, 1) * tf.expand_dims(inv_timescales, 0)*position_rate
+  signal = tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=1)
+  signal = tf.pad(signal, [[0, 0], [0, tf.mod(channels, 2)]])
+  signal = tf.reshape(signal, [1, length, channels])
+  return signal

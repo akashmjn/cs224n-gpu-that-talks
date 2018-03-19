@@ -24,14 +24,14 @@ args = parser.parse_args()
 # Initialize graph, path to model checkpoints
 params1 = Params(os.path.join(args.m1,'params.json'))
 params2 = Params(os.path.join(args.m2,'params.json'))
-params = params2
+params = params1
 g = ModelGraph(params,'synthesize')
 
 # text inputs 
 input_arr = load_data(params,'synthesize')
 
 # shape (1, len)
-output_mel = np.zeros((input_arr.shape[0],params.max_T,params.F))
+output_mel = np.zeros((input_arr.shape[0],params.max_T,params.F)) 
 output_mag = np.zeros((input_arr.shape[0],params.max_T,params.Fo))
 
 # TODO: wrap this up in a function 
@@ -59,10 +59,10 @@ with tf.Session() as sess:
         output_mel[:,i,:] = model_out[:,-1,:]
 
     # Convert to magnitude spectrograms
-    output_mag = sess.run(g.Zhat,{g.S:output_mel,g.transcripts:input_arr})
+    output_mag, attn_out = sess.run([g.Zhat,g.A],{g.S:output_mel,g.transcripts:input_arr})
     for i in range(n_samples):
         print('Generating full audio for sample: {}/{}'.format(i+1,n_samples))
-        wav = spectrogram2wav(output_mag[i],params)
+        wav = spectrogram2wav(output_mag[i],params) # adding some silence before
         fdir = os.path.join(args.sample_dir,params.model_name)
         if not os.path.exists(fdir):
             os.makedirs(fdir)
@@ -71,4 +71,5 @@ with tf.Session() as sess:
 
         plt.imsave(fname+'_mel.png',output_mel[i].T,cmap='gray')
         plt.imsave(fname+'_mag.png',output_mag[i].T,cmap='gray')
+        plt.imsave(fname+'_attn.png',attn_out[i].T,cmap='gray')
 

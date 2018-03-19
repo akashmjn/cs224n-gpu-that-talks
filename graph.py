@@ -7,7 +7,7 @@ import numpy as np
 from tensorflow.python import debug as tf_debug
 
 from model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
-from utils import set_logger, Params, learning_rate_decay, guided_attention
+from utils import set_logger, Params, learning_rate_decay, guided_attention, get_timing_signal_1d
 from data_load import load_data, get_batch
 
 
@@ -79,6 +79,11 @@ class ModelGraph(object):
 
         self.add_input_embeddings(reuse)
         self.logger.info('Initialized input character embeddings with dim: {}'.format(self.L.shape))
+
+        if self.params.pos_encoding:
+            self.add_pos_encodings()
+            self.logger.info('Initialized position encodings, shapes: {}, {}'.format(self.K_pos.shape,self.Q_pos.shape))
+
         self.add_predict_op(reuse)
         if mode=='train_text2mel':
             self.add_loss_op(mode)
@@ -101,15 +106,37 @@ class ModelGraph(object):
             self.L = tf.nn.embedding_lookup(embedding_mat,self.transcripts)
 
         return self.L
+
+    def add_pos_encodings(self,reuse=None):
+        """
+        Args:
+            reuse (bool): reuse of variable scope
+        Returns:
+            K_pos (tf.tensor) (shape: 1, max_N, d)
+            Q_pos (tf.tensor) (shape: 1, max_T, d)
+        """
+
+        self.K_pos = get_timing_signal_1d(self.params.max_N,self.params.d,self.params.pos_rate)
+        self.Q_pos = get_timing_signal_1d(self.params.max_T,self.params.d)
+
+        return self.K_pos, self.Q_pos
+
     
     def add_predict_op(self,reuse=None):
         
         self.K, self.V = TextEncBlock(self.L,self.params.d)
+
         if self.params.local_encoding:            # as in Gehring et. al (2017) uses input embedding L in value
             self.V = tf.sqrt(0.5)*(self.L+self.V) # weighted sum with V, L 
+
         self.logger.info('Encoded K, V with dim: {}'.format(self.K.shape))
         self.Q = AudioEncBlock(self.S,self.params.d)
         self.logger.info('Encoded Q with dim: {}'.format(self.Q.shape))
+
+        if self.params.pos_encoding:             # as in Gehring et. al (2017) adding these to precondition monotonicity
+            self.K = self.K + self.K_pos[0,:tf.shape(self.K)[1],:]
+            self.Q = self.Q + self.Q_pos[0,:tf.shape(self.Q)[1],:]
+
         self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
         self.logger.info('Encoded R with dim: {}'.format(self.R.shape))
         self.RQ = tf.concat([self.R, self.Q],axis=2)
