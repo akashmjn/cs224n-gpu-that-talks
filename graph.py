@@ -158,7 +158,7 @@ class ModelGraph(object):
         assert len(self.L1_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.L1_loss.shape)
         self.CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=target,logits=logit))
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
-        self.loss = self.params.l1_loss_weight*self.L1_loss + self.CE_loss
+        self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss
 
         # guided attention loss from Tachibana et. al (2017)
         if self.params.attention_mode =='guided':
