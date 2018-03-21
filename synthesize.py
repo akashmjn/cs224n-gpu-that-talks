@@ -17,6 +17,7 @@ from dsp_utils import spectrogram2wav, save_wav
 parser = argparse.ArgumentParser()
 parser.add_argument('-m1', help="Checkpoint directory for Text2Mel")
 parser.add_argument('-m2', help="Checkpoint directory for SSRN")
+parser.add_argument('--test_data', help="Data file containing sentences to synthesize")
 parser.add_argument('--sample_dir', default="../samples",
                     help="Directory to save generated samples.")
 args = parser.parse_args()
@@ -25,6 +26,7 @@ args = parser.parse_args()
 params1 = Params(os.path.join(args.m1,'params.json'))
 params2 = Params(os.path.join(args.m2,'params.json'))
 params = params1
+params.dict['test_data'] = args.test_data # setting this based on what passed in
 g = ModelGraph(params,'synthesize')
 
 # text inputs 
