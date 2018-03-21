@@ -11,8 +11,6 @@ import logging
 import numpy as np
 import librosa
 import os, copy
-import matplotlib
-matplotlib.use('pdf')
 import matplotlib.pyplot as plt
 from scipy import signal
 import tensorflow as tf

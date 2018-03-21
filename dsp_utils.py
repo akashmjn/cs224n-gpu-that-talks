@@ -13,6 +13,7 @@ import librosa
 import os, copy
 from scipy import signal
 from scipy.io import wavfile
+from spsi import spsi
 
 import tensorflow as tf
 import pdb
@@ -125,6 +126,8 @@ def spectrogram2wav(mag,params):
 
     # wav reconstruction
     wav = griffin_lim(mag,params)
+    #wav = librosa.istft(mag,hop_length=params.hop_length,center=False)
+    #wav = spsi(mag,params.n_fft,params.hop_length)
 
     # undo-preemphasis
     wav = signal.lfilter([1], [1, -params.pre_emphasis], wav)

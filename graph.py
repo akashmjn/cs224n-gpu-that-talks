@@ -34,8 +34,8 @@ class ModelGraph(object):
             self.global_step = tf.Variable(0, name='global_step', trainable=False)                  
 
         # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
-        # if 'train' in mode: 
-        self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode,self.logger)
+        if 'synthesize' not in mode: 
+            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode,self.logger)
         if mode in ['train_text2mel','val_text2mel','synthesize']:
             self.build_text2mel(mode=mode,reuse=None) # TODO: maybe look at combined training?
         if mode in ['train_ssrn','val_ssrn','synthesize']:
