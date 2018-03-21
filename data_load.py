@@ -61,7 +61,7 @@ def load_data(params,mode="train"):
 
     if 'train' in mode or 'val' in mode:
         # toggle train/val datasets
-        transcript_csv_path = params.transcript_csv_path_train if mode=='train' else params.transcript_csv_path_val
+        transcript_csv_path = params.transcript_csv_path_train if 'train' in mode else params.transcript_csv_path_val
         # Parse
         fpaths, text_lengths, texts = [], [], []
         lines = codecs.open(transcript_csv_path, 'r', 'utf-8').readlines()
