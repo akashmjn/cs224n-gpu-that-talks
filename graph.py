@@ -34,11 +34,11 @@ class ModelGraph(object):
             self.global_step = tf.Variable(0, name='global_step', trainable=False)                  
 
         # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
-        if 'train' in mode: 
-            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode,self.logger)
-        if mode in ['train_text2mel','synthesize']:
+        # if 'train' in mode: 
+        self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode,self.logger)
+        if mode in ['train_text2mel','val_text2mel','synthesize']:
             self.build_text2mel(mode=mode,reuse=None) # TODO: maybe look at combined training?
-        if mode in ['train_ssrn','synthesize']:
+        if mode in ['train_ssrn','val_ssrn','synthesize']:
             self.build_ssrn(mode,reuse=None)
         tf.summary.merge_all()
 
@@ -47,10 +47,10 @@ class ModelGraph(object):
         Creates graph for the SSRN model for either training or inference
         During training, for now takes true mels Y as input with target as the true mag Z
         """
-        assert mode in ['train_ssrn','synthesize']
+        assert mode in ['train_ssrn','val_ssrn','synthesize']
         self.logger.info('Building training graph for SSRN ...')
 
-        if mode=='train_ssrn':
+        if mode in ['train_ssrn','val_ssrn']:
             self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse) # input, labels: true mels, mags
             self.add_loss_op(mode)
             self.add_train_op()
@@ -67,11 +67,11 @@ class ModelGraph(object):
         are used as the feedback input S. During inference (synthesis) a variable time-length input 
         consisting of mel frames generated so far is used as input.  
         """
-        assert mode in ['train_text2mel','synthesize']
+        assert mode in ['train_text2mel','val_text2mel','synthesize']
         # building training graph for Text2Mel
         self.logger.info('Building training graph for Text2Mel ...')       
 
-        if mode=='train_text2mel':
+        if mode in ['train_text2mel','val_text2mel']:
             self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
         elif mode=='synthesize':
             self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
@@ -85,7 +85,7 @@ class ModelGraph(object):
             self.logger.info('Initialized position encodings, shapes: {}, {}'.format(self.K_pos.shape,self.Q_pos.shape))
 
         self.add_predict_op(reuse)
-        if mode=='train_text2mel':
+        if mode in ['train_text2mel','val_text2mel']:
             self.add_loss_op(mode)
             self.add_train_op()
 
@@ -148,9 +148,9 @@ class ModelGraph(object):
     
     def add_loss_op(self,mode):
     
-        if mode=='train_ssrn':
+        if 'ssrn' in mode:
             target, pred, logit, sumlabel = self.Z, self.Zhat, self.Zlogit, 'train/Z'
-        elif mode=='train_text2mel':
+        elif 'text2mel' in mode:
             target, pred, logit, sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
 
         # compute loss (without guided attention loss for now)

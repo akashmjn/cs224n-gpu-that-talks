@@ -59,7 +59,7 @@ def load_data(params,mode="train"):
     # Load vocabulary
     char2idx, idx2char = load_vocab(params)
 
-    if mode in ['train','val']:
+    if 'train' in mode or 'val' in mode:
         # toggle train/val datasets
         transcript_csv_path = params.transcript_csv_path_train if mode=='train' else params.transcript_csv_path_val
         # Parse
@@ -91,16 +91,16 @@ def get_batch(params,mode,logger):
     
     with tf.device('/cpu:0'):
         # Load data
-        file_mode = 'train' if 'train' in mode else 'synthesize'
-        logger.info('Loading in filenames from load_data with mode: {}'.format(file_mode))
-        fpaths, text_lengths, texts = load_data(params,file_mode) # list
+        logger.info('Loading in filenames from load_data with mode: {}'.format(mode))
+        fpaths, text_lengths, texts = load_data(params,mode) # list
         maxlen, minlen = max(text_lengths), min(text_lengths)
 
         # Calc total batch count
         num_batch = len(fpaths) // params.batch_size
 
         # Create Queues
-        fpath, text_length, text = tf.train.slice_input_producer([fpaths, text_lengths, texts], shuffle=True)
+        shuffle_batch = False if 'val' in mode else True
+        fpath, text_length, text = tf.train.slice_input_producer([fpaths, text_lengths, texts], shuffle=shuffle_batch)
         logger.info('Created input queues for data, total num_batch: {}'.format(num_batch))
 
         # Parse
