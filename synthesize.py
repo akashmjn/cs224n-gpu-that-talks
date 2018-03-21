@@ -13,6 +13,7 @@ from graph import ModelGraph
 from utils import Params
 from data_load import load_vocab, text_normalize, load_data
 from dsp_utils import spectrogram2wav, save_wav
+from multiprocessing import Pool
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-m1', help="Checkpoint directory for Text2Mel")
@@ -35,6 +36,15 @@ input_arr = load_data(params,'synthesize')
 # shape (1, len)
 output_mel = np.zeros((input_arr.shape[0],params.max_T,params.F)) 
 output_mag = np.zeros((input_arr.shape[0],params.max_T,params.Fo))
+
+def invert_mag(output_mag,params,args):
+    print('Generating full audio for sample: {}/{}'.format(i+1,n_samples))
+    wav = spectrogram2wav(output_mag,params) # adding some silence before
+    fdir = os.path.join(args.sample_dir,params.model_name)
+    if not os.path.exists(fdir):
+        os.makedirs(fdir)
+    fname = os.path.join(fdir,'sample_{}'.format(i))
+    save_wav(wav,fname+'.wav',params.sampling_rate)
 
 # TODO: wrap this up in a function 
 with tf.Session() as sess:
@@ -62,15 +72,12 @@ with tf.Session() as sess:
 
     # Convert to magnitude spectrograms
     output_mag, attn_out = sess.run([g.Zhat,g.A],{g.S:output_mel,g.transcripts:input_arr})
+    process_func = lambda x: invert_mag(x,params,args)
+    mags_list = [output_mag[i] for i in range(n_samples)]
+    with Pool(12) as p:
+        p.map(process_func,mags_list)
     for i in range(n_samples):
-        print('Generating full audio for sample: {}/{}'.format(i+1,n_samples))
-        wav = spectrogram2wav(output_mag[i],params) # adding some silence before
-        fdir = os.path.join(args.sample_dir,params.model_name)
-        if not os.path.exists(fdir):
-            os.makedirs(fdir)
-        fname = os.path.join(fdir,'sample_{}'.format(i))
-        save_wav(wav,fname+'.wav',params.sampling_rate)
-
+        print('Saving plots for sample: {}/{}'.format(i+1,n_samples))
         plt.imsave(fname+'_mel.png',output_mel[i].T,cmap='gray')
         plt.imsave(fname+'_mag.png',output_mag[i].T,cmap='gray')
         plt.imsave(fname+'_attn.png',attn_out[i].T,cmap='gray')
