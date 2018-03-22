@@ -51,7 +51,7 @@ def text_normalize(text,params):
     text = re.sub("[ ]+", " ", text)
     return text
 
-def load_data(params,mode="train"):
+def load_data(params,mode="train",lines=None):
     '''Loads data
       Args:
           mode: "train" or "synthesize".
@@ -76,15 +76,16 @@ def load_data(params,mode="train"):
         return fpaths, text_lengths, texts
 
     elif mode=='synthesize': # synthesize on unseen test text.
-        # Parse
+        # Parse from a file
         lines = codecs.open(params.test_data, 'r', 'utf-8').readlines()[1:]
-        sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
-        print("Loading test sentences: {}".format(sents))
-        max_len = max([len(sent) for sent in sents])
-        texts = np.zeros((len(sents), max_len), np.int32)
-        for i, sent in enumerate(sents):
-            texts[i, :len(sent)] = [char2idx[char] for char in sent]
-        return texts
+
+    sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
+    print("Loading test sentences: {}".format(sents))
+    max_len = max([len(sent) for sent in sents])
+    texts = np.zeros((len(sents), max_len), np.int32)
+    for i, sent in enumerate(sents):
+        texts[i, :len(sent)] = [char2idx[char] for char in sent]
+    return texts
 
 def get_batch(params,mode,logger):
     """Loads training data and put them in queues"""
