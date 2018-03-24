@@ -15,17 +15,28 @@ from data_load import load_vocab, text_normalize, load_data
 from dsp_utils import spectrogram2wav, save_wav
 from multiprocessing import Pool
 
+def invert_mag(inp_triple):
+    
+    output_mag, i, pool_args = inp_triple
+    sample_dir = pool_args['sample_dir']
+    params = pool_args['params']
 
+    print('Generating full audio for sample {}'.format(i))
+    wav = spectrogram2wav(output_mag,params) # adding some silence before
+    if not os.path.exists(sample_dir):
+        os.makedirs(sample_dir)
+    fname = os.path.join(sample_dir,'sample_{}'.format(i))
+    save_wav(wav,fname+'.wav',params.sampling_rate)   
 
 def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data_dir=None,lines=None):
 
     # Initialize graph, path to model checkpoints
     params1 = Params(os.path.join(m1_dir,'params.json'))
     params2 = Params(os.path.join(m2_dir,'params.json'))
-    params.dict['n_iter'] = n_iter
     params = params1
     if test_data_dir is not None:
         params.dict['test_data'] = test_data_dir # setting this based on what passed in
+    params.dict['n_iter'] = n_iter
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # use single GPUs available
     g = ModelGraph(params,'synthesize')   
@@ -40,14 +51,6 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data_dir=None,lines=None
     output_mel = np.zeros((input_arr.shape[0],params.max_T,params.F)) 
     output_mag = np.zeros((input_arr.shape[0],params.max_T,params.Fo))
 
-    def invert_mag(inp_tuple):
-        output_mag, i = inp_tuple
-        print('Generating full audio for sample {}'.format(i))
-        wav = spectrogram2wav(output_mag,params) # adding some silence before
-        if not os.path.exists(sample_dir):
-            os.makedirs(sample_dir)
-        fname = os.path.join(sample_dir,'sample_{}'.format(i))
-        save_wav(wav,fname+'.wav',params.sampling_rate)   
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -74,14 +77,22 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data_dir=None,lines=None
     
         # Convert to magnitude spectrograms
         output_mag, attn_out = sess.run([g.Zhat,g.A],{g.S:output_mel,g.transcripts:input_arr})
-        mags_list = [ (output_mag[i],i) for i in range(n_samples)]
+        pool_args = {}
+        pool_args['sample_dir'] = sample_dir
+        pool_args['params'] = params
+
+        mags_list = [ (output_mag[i],i,pool_args) for i in range(n_samples)]
+
         with Pool(12) as p:
             p.map(invert_mag,mags_list)
         for i in range(n_samples):
+            fname = os.path.join(sample_dir,'sample_{}'.format(i))
             print('Saving plots for sample: {}/{}'.format(i+1,n_samples))
             plt.imsave(fname+'_mel.png',output_mel[i].T,cmap='gray')
             plt.imsave(fname+'_mag.png',output_mag[i].T,cmap='gray')
             plt.imsave(fname+'_attn.png',attn_out[i].T,cmap='gray')
+
+    tf.reset_default_graph()
 
 
 if __name__ == '__main__':

@@ -80,7 +80,7 @@ def load_data(params,mode="train",lines=None):
         lines = codecs.open(params.test_data, 'r', 'utf-8').readlines()[1:]
         sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
 
-    sents = [text_normalize(line) + params.end_token for line in lines]
+    sents = [text_normalize(line,params) + params.end_token for line in lines]
     print("Loading test sentences: {}".format(sents))
     max_len = max([len(sent) for sent in sents])
     texts = np.zeros((len(sents), max_len), np.int32)
