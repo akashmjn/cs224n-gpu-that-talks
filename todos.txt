@@ -10,9 +10,9 @@
     * implement, test causal decoder F2d 
     * implement, test causal decoder d2F 
 
-- Attention implementation:
+* Attention implementation:
     * implement basic attention mechanism
-    ^ add, test guided attention loss
+    * add, test guided attention loss
 
 * SSRN implementation:
     * implement, test transposed convolution
@@ -24,17 +24,16 @@
     * predict_op, loss_op
     * train_op, train/predict on batch
     * training, checkpointing, evaluation framework
-    - train/dev data load
+    * train/dev data load
 
 * Inference/Synthesis graph 
     * implement restoring of variables 
     * implement output feedback
 
 
-^ Experimentation
-    ^ modify attention with position encodings, w w/o guided attention
+* Experimentation
+    * modify attention with position encodings, w w/o guided attention
     ^ multi-task learning, joint optimization
-
 
 
 - Edit to use tf.data pipeline
