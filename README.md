@@ -7,8 +7,8 @@ As discussed in the report, we can get fairly decent audio quality with Text2Mel
 
 **Poster**: [[link]](https://akashmjn.github.io/cs224n/cs224n-final-poster.pdf)) 
 **Final Report**: [[link]](https://akashmjn.github.io/cs224n/cs224n-final-project-report.pdf) <br/>
-**Output Samples (M4 model - 60k steps)**: [[link]](https://soundcloud.com/akashmjn/sets/m4-tuned-model) <br/>
-**Output Samples (M1 'audio language model' - 60k steps)**: [[link]](https://soundcloud.com/akashmjn/sets/m1-audio-language-model) <br/>
+**Test Samples (M4 model - 60k steps)**: [[link]](https://soundcloud.com/akashmjn/sets/m4-tuned-model) <br/>
+**Samples (M1 'audio language model' - 60k steps)**: [[link]](https://soundcloud.com/akashmjn/sets/m1-audio-language-model) <br/>
 
 ![Model Schematic](https://raw.githubusercontent.com/akashmjn/cs224n-gpu-that-talks/master/reports/model-schematic.png)
 
