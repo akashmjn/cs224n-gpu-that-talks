@@ -8,13 +8,13 @@ import os,sys
 
 import tensorflow as tf
 from tqdm import tqdm
-from graph import ModelGraph
-from utils import Params
+from src.graph import ModelGraph
+from src.utils import Params
 
-def evaluate_model_preds(mode,params_path):
+def evaluate_model_preds(params_path,mode):
     """
     Given a log directory, generates predictions and returns loss metrics for full dataset. 
-    mode - indicates 'val/train_text2mel/ssrn' and toggles accordingly. 
+    mode - indicates 'val/train _text2mel/ssrn' and toggles accordingly. 
     """
 
     params = Params(params_path)
@@ -35,16 +35,20 @@ def evaluate_model_preds(mode,params_path):
         # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
         for _ in tqdm(range(g.num_batch), total=g.num_batch, ncols=70, leave=False, unit='b'):
-            loss_out, L1_out, CE_out, att_out = sess.run([g.loss, g.L1_loss, g.CE_loss, g.att_loss])
+            if 'text2mel' in mode:
+                loss_out, L1_out, CE_out, att_out = sess.run([g.loss, g.L1_loss, g.CE_loss, g.att_loss])
+            elif 'ssrn' in mode:
+                loss_out, L1_out, CE_out = sess.run([g.loss, g.L1_loss, g.CE_loss])
+                att_out = 0.0
 
-            if _ % 20 == 0:
-                logger.info('Prediction loss: {:.4f}, L1: {:.4f}, CE: {:.4f}, Att: {:.4f}'.format(
-                    loss_out, L1_out, CE_out, att_out))
             total_loss_avg += loss_out/g.num_batch
             L1_loss_avg += L1_out/g.num_batch
             CE_loss_avg += CE_out/g.num_batch
             att_loss_avg += att_out/g.num_batch
 
+            if _ % 20 == 0:
+                logger.info('Prediction loss: {:.4f}, L1: {:.4f}, CE: {:.4f}, Att: {:.4f}'.format(
+                    loss_out, L1_out, CE_out, att_out))
 
     logger.info('Completed predictions: Avg loss: {:.4f}, L1: {:.4f}, CE: {:.4f}, Att: {:.4f}'.format(
                 total_loss_avg, L1_loss_avg, CE_loss_avg, att_loss_avg))
@@ -56,9 +60,9 @@ def evaluate_model_preds(mode,params_path):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--params', help="Path to params.json in a checkpoint directory to be evaluated")
-    parser.add_argument('--mode', help="One of train/val_text2mel/ssrn")
+    parser.add_argument('params', help="Path to params.json in a checkpoint directory to be evaluated")
+    parser.add_argument('mode', help="One of train/val _text2mel/ssrn")
     args = parser.parse_args()
 
-    evaluate_model_preds(args.mode,args.params)
+    evaluate_model_preds(args.params,args.mode)
 

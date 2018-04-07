@@ -4,9 +4,7 @@ import logging
 import tensorflow as tf
 import numpy as np
 from tensorflow.python import debug as tf_debug
-from utils import set_logger
-
-# TODO: Enable reuse of graph for validating model during training 
+from .utils import set_logger
 
 #### Sub-modules used by network blocks ####
 
@@ -289,7 +287,6 @@ def AttentionBlock(K,V,Q,scope='AttentionBlock'):
     d = Q.shape.as_list()[2]
     # K,V = KV[:,:,:d], KV[:,:,d:] # splitting out into blocks
 
-    # TODO: Add guided attention loss computation
     A = tf.nn.softmax(tf.matmul(Q,
                       tf.transpose(K,[0,2,1]))/tf.sqrt(tf.cast(d,tf.float32))) # scaled d.p. attention
     R = tf.matmul(A,V)
@@ -350,7 +347,7 @@ def SSRNBlock(Yhat,c,Fo,scope='SSRNBlock',reuse=None):
     return Zlogit, Zhat        
 
 
-###### Test functions ######
+###### Test functions (might be slightly deprecated) ######
 
 def test_modules(mode,**kwargs):
 

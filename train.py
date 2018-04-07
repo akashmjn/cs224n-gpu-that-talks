@@ -5,19 +5,25 @@
 import argparse
 import logging
 import os,sys
+import pdb
 
 import tensorflow as tf
 from tqdm import tqdm
-from graph import ModelGraph
-from utils import Params
+from src.graph import ModelGraph
+from src.utils import Params
 
 if __name__ == '__main__':
 
-    params_path = sys.argv[1]
-    params = Params(params_path)
-    print('Running a training run with params from: {}'.format(params_path))
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(params.gpu)  # default use single GPU
-    g = ModelGraph(params,'train_text2mel')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('params', help="Path to params.json file containing different hyperparameters")
+    parser.add_argument('mode', help="Indicate which model to train. Options: train_text2mel, train_ssrn")
+    parser.add_argument('--gpu', type=int, default=0,help="GPU to train on if multiple available")
+    args = parser.parse_args()
+
+    params = Params(args.params)
+    print('Running a training run with params from: {}'.format(args.params))
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)  # default use single GPU
+    g = ModelGraph(params,args.mode)
     logger = g.logger
     sv = tf.train.Supervisor(logdir=params.log_dir, save_model_secs=0, global_step=g.global_step)
     with sv.managed_session() as sess:

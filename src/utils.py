@@ -29,6 +29,8 @@ class Params():
 
     def __init__(self, json_path):
         self.update(json_path)
+        self.dict['log_dir'] = os.path.dirname(json_path) # logs saved by default 
+                                                          # in folder containing params
 
     def save(self, json_path):
         """Saves parameters to json file"""
@@ -109,14 +111,6 @@ def plot_alignment(alignment, gs, params):
     plt.title('{} Steps'.format(gs))
     plt.savefig('{}/alignment_{}.png'.format(dir, gs), format='png')       
 
-
-def guided_attention(params,g=0.2):
-    '''Guided attention. Refer to page 3 on the paper.'''
-    W = np.zeros((params.max_N, params.max_T), dtype=np.float32)
-    for n_pos in range(W.shape[0]):
-        for t_pos in range(W.shape[1]):
-            W[n_pos, t_pos] = 1 - np.exp(-(t_pos / float(params.max_T) - n_pos / float(params.max_N)) ** 2 / (2 * g * g))
-    return W
 
 def learning_rate_decay(params, global_step):
     '''Noam scheme from tensor2tensor'''

@@ -6,9 +6,9 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python import debug as tf_debug
 
-from model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
-from utils import set_logger, Params, learning_rate_decay, guided_attention, get_timing_signal_1d
-from data_load import load_data, get_batch
+from .model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
+from .utils import set_logger, Params, learning_rate_decay, get_timing_signal_1d
+from .data_load import load_data, get_batch
 
 
 class ModelGraph(object):
@@ -45,7 +45,7 @@ class ModelGraph(object):
     def build_ssrn(self,mode,reuse=None):
         """
         Creates graph for the SSRN model for either training or inference
-        During training, for now takes true mels Y as input with target as the true mag Z
+        During training, takes true mels Y as input with target as the true mag Z
         """
         assert mode in ['train_ssrn','val_ssrn','synthesize']
         self.logger.info('Building training graph for SSRN ...')
@@ -152,6 +152,7 @@ class ModelGraph(object):
             target, pred, logit, sumlabel = self.Z, self.Zhat, self.Zlogit, 'train/Z'
         elif 'text2mel' in mode:
             target, pred, logit, sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
+            tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
 
         # compute loss (without guided attention loss for now)
         self.L1_loss = tf.reduce_mean(tf.abs(target-pred))
@@ -161,7 +162,7 @@ class ModelGraph(object):
         self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss
 
         # guided attention loss from Tachibana et. al (2017)
-        if self.params.attention_mode =='guided':
+        if self.params.attention_mode =='guided' and 'ssrn' not in mode:
             # A (shape: batch_size, N, T) - these dimensions are fixed for a single padded batch
             N, T = tf.cast(tf.shape(self.A)[1],tf.float32), tf.cast(tf.shape(self.A)[2],tf.float32)
             W = tf.fill(tf.shape(self.A),0.0) # weight matrix to be multiplied with A
@@ -172,15 +173,14 @@ class ModelGraph(object):
             self.loss = self.loss + self.att_loss
             self.logger.info('Added guided attention loss over A: {}'.format(self.A))
 
-        tf.summary.image('train/mel_target', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
-        tf.summary.image('train/mel_hat', tf.expand_dims(tf.transpose(self.Yhat[:1], [0, 2, 1]), -1))
-        tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
-        tf.summary.histogram('train/Ylogit',self.Ylogit)
-        tf.summary.histogram('train/Yhat',self.Yhat)
+        tf.summary.image(sumlabel+'_target', tf.expand_dims(tf.transpose(target[:1], [0, 2, 1]), -1))
+        tf.summary.image(sumlabel+'_pred', tf.expand_dims(tf.transpose(pred[:1], [0, 2, 1]), -1))
+        tf.summary.histogram(sumlabel+'_target',target)
+        tf.summary.histogram(sumlabel+'_logit',logit)
+        tf.summary.histogram(sumlabel+'_pred',pred)
         tf.summary.scalar('train/L1_loss',self.L1_loss)
         tf.summary.scalar('train/CE_loss',self.CE_loss)
         tf.summary.scalar('train/total_loss',self.loss)
-        tf.summary.histogram(sumlabel,target)
     
         return self.loss, self.L1_loss, self.CE_loss
 
@@ -207,7 +207,7 @@ class ModelGraph(object):
         # self.train_op = self.optimizer.minimize(self.loss)
 
 
-####### test functions ########
+####### test functions (might be slightly deprecated) ########
 
 def test_graph_setup(mode='placeholder'):
 

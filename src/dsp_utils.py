@@ -13,7 +13,7 @@ import librosa
 import os, copy
 from scipy import signal
 from scipy.io import wavfile
-from spsi import spsi
+from .spsi import spsi
 
 import tensorflow as tf
 import pdb

@@ -5,17 +5,25 @@ import logging
 import os,sys
 import numpy as np
 import matplotlib.pyplot as plt
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
 import pdb
 
 import tensorflow as tf
-from tqdm import tqdm
-from graph import ModelGraph
-from utils import Params
-from data_load import load_vocab, text_normalize, load_data
-from dsp_utils import spectrogram2wav, save_wav
-from multiprocessing import Pool
+from src.graph import ModelGraph
+from src.utils import Params
+from src.data_load import load_vocab, text_normalize, load_data
+from src.dsp_utils import spectrogram2wav, save_wav
 
 def invert_mag(inp_triple):
+    """
+    Processes a magnitude spectrogram and saves to corresponding audio file. 
+    Used by multiprocessing pool function uses an input tuple as a hack for 
+    additional arguments needed for printing/saving. 
+
+    Args:
+        inp_triple (tuple): (mags_np.ndarray,i,pool_args) pool_args (dict) - sample_dir (output_dir), params
+    """
     
     output_mag, i, pool_args = inp_triple
     sample_dir = pool_args['sample_dir']
@@ -28,15 +36,16 @@ def invert_mag(inp_triple):
     fname = os.path.join(sample_dir,'sample_{}'.format(i))
     save_wav(wav,fname+'.wav',params.sampling_rate)   
 
-def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data_dir=None,lines=None):
+def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref_db=30):
 
     # Initialize graph, path to model checkpoints
     params1 = Params(os.path.join(m1_dir,'params.json'))
     params2 = Params(os.path.join(m2_dir,'params.json'))
     params = params1
-    if test_data_dir is not None:
-        params.dict['test_data'] = test_data_dir # setting this based on what passed in
+    if test_data is not None:
+        params.dict['test_data'] = test_data # setting this based on what passed in
     params.dict['n_iter'] = n_iter
+    params.dict['ref_db'] = ref_db # output volume
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # use single GPUs available
     g = ModelGraph(params,'synthesize')   
@@ -83,7 +92,8 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data_dir=None,lines=None
 
         mags_list = [ (output_mag[i],i,pool_args) for i in range(n_samples)]
 
-        with Pool(12) as p:
+        # Griffin-lim inversion seems to be relatively time-taking hence parallelizing
+        with Pool(cpu_count()) as p:
             p.map(invert_mag,mags_list)
         for i in range(n_samples):
             fname = os.path.join(sample_dir,'sample_{}'.format(i))
@@ -98,12 +108,13 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data_dir=None,lines=None
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m1', help="Checkpoint directory for Text2Mel")
-    parser.add_argument('-m2', help="Checkpoint directory for SSRN")
-    parser.add_argument('--test_data', help="Data file containing sentences to synthesize")
-    parser.add_argument('--n_iter',type=int,default=50, help="Number of Griffin lim iterations to run for inversion")
+    parser.add_argument('m1', help="Checkpoint directory for Text2Mel")
+    parser.add_argument('m2', help="Checkpoint directory for SSRN")
+    parser.add_argument('test_data', help="Data file containing sentences to synthesize")
+    parser.add_argument('--n_iter',type=int,default=150, help="Number of Griffin lim iterations to run for inversion (default: 150)")
     parser.add_argument('--sample_dir', default="../samples",
                         help="Directory to save generated samples.")
+    parser.add_argument('--ref_db',type=int,default=30,help="Output audio volume (default: 30)")
     args = parser.parse_args()
 
-    synthesize(args.m1,args.m2,args.sample_dir,args.n_iter,args.test_data)
+    synthesize(args.m1,args.m2,args.sample_dir,args.n_iter,args.test_data,ref_db=args.ref_db)

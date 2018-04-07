@@ -11,11 +11,8 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
-from dsp_utils import *
-import codecs
-import re
-import os
-import unicodedata
+import codecs, re, os, unicodedata
+from .dsp_utils import *
 
 import pdb
 
