@@ -35,6 +35,7 @@
     * modify attention with position encodings, w w/o guided attention
     ^ multi-task learning, joint optimization
 
+- Document params file parameters
 - Test training script 
     for positional encoding
 - Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
