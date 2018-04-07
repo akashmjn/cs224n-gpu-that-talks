@@ -3,7 +3,7 @@
 Implementation of a convolutional seq2seq-based model based on [Tachibana et. al. (2017)](https://arxiv.org/abs/1710.08969). 
 Given a sequence of characters, the model predicts a sequence of spectrogram frames in two stages (Text2Mel and SSRN). 
 
-As discussed in the report, we can get fairly decent audio quality with Text2Mel trained for 60k steps, SSRN for 100k steps. This corresponds to about (10+20) hours of training on a single Tesla M60 GPU. 
+As discussed in the report, we can get fairly decent audio quality with Text2Mel trained for 60k steps, SSRN for 100k steps. This corresponds to about (10+20) hours of training on a single Tesla M60 GPU on the [LJ Speech Dataset](https://keithito.com/LJ-Speech-Dataset/).
 
 **Poster**: [[link]](https://akashmjn.github.io/cs224n/cs224n-final-poster.pdf)) 
 **Final Report**: [[link]](https://akashmjn.github.io/cs224n/cs224n-final-project-report.pdf) <br/>
@@ -13,6 +13,24 @@ As discussed in the report, we can get fairly decent audio quality with Text2Mel
 ![Model Schematic](https://raw.githubusercontent.com/akashmjn/cs224n-gpu-that-talks/master/reports/model-schematic.png)
 
 ## Usage:
+
+### Directory Structure
+
+```
+ - runs (contains different params.json files and logs/model checkpoints for different runs/params)
+    - run1/params.json
+    - ...
+ - src (implementation code package)
+ - sentences (contains test sentences in .txt files)
+train.py
+evaluate.py
+synthesize.py
+
+../data (directory containing data in format below)
+ - FOLDER
+    - train.csv, val.csv (files containing [wav_file_name|transcript|normalized_trascript] as in LJ-Speech dataset)
+    - wavs (folder containing corresponding .wav audio files)
+```
 
 ### Script files
 
