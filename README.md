@@ -45,3 +45,10 @@ python synthesize.py <TEXT2MEL_PARAMS> <SSRN_PARAMS> <SENTENCES.txt> (<N_ITER> <
 
 *   **Evaluation**: Runs model predictions across the entire training and validation sets for different saved model checkpoints and saves the final results. 
 *   **Demo**: Interactively type input sentences and listen to the generated output audio. 
+
+
+## Further:
+
+* Training on different languages with smaller amount of data available [Dataset of Indian languages](https://www.iitm.ac.in/donlab/tts/)
+* Exploring use of semi-supervised methods to accelerate training, using a pre-trained 'audio-language model' as initialization
+
