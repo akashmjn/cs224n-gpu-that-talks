@@ -21,6 +21,7 @@ As discussed in the report, we can get fairly decent audio quality with Text2Mel
     - run1/params.json ...
  - src (implementation code package)
  - sentences (contains test sentences in .txt files)
+ 
 train.py
 evaluate.py
 synthesize.py
