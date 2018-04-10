@@ -1,6 +1,6 @@
 ## Repository for CS224n project: Attention, I'm Trying to Speak. 
 
-Implementation of a convolutional seq2seq-based model based on [Tachibana et. al. (2017)](https://arxiv.org/abs/1710.08969). 
+Implementation of a convolutional seq2seq-based text-to-speech model based on [Tachibana et. al. (2017)](https://arxiv.org/abs/1710.08969). 
 Given a sequence of characters, the model predicts a sequence of spectrogram frames in two stages (Text2Mel and SSRN). 
 
 As discussed in the report, we can get fairly decent audio quality with Text2Mel trained for 60k steps, SSRN for 100k steps. This corresponds to about (10+20) hours of training on a single Tesla M60 GPU on the [LJ Speech Dataset](https://keithito.com/LJ-Speech-Dataset/).
