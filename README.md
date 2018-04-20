@@ -56,13 +56,13 @@ python synthesize.py <TEXT2MEL_PARAMS> <SSRN_PARAMS> <SENTENCES.txt> (<N_ITER> <
 ## Referenced External Code: 
 
 (From src/__init__.py) Utility Code has been referenced from the following sources, all other code is the author's own: 
-    - src/data_load.py, dsp_utils.py (with modifications)
-      https://www.github.com/kyubyong/dc_tts, (Author: kyubyong park, kbpark.linguist@gmail.com)
-      https://github.com/r9y9/deepvoice3_pytorch/blob/master/audio.py
-    - src/spsi.py (referenced)
-      https://github.com/lonce/SPSI_Python
-    - src/utils.py (referenced)
-      https://github.com/cs230-stanford/cs230-code-examples
-      https://www.github.com/kyubyong/dc_tts
-      https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
+* src/data_load.py, dsp_utils.py (with modifications)
+https://www.github.com/kyubyong/dc_tts, (Author: kyubyong park, @Kyubyong)
+https://github.com/r9y9/deepvoice3_pytorch/blob/master/audio.py (Author: @r9y9)
+* src/spsi.py (referenced)
+https://github.com/lonce/SPSI_Python (Author: @lonce)
+* src/utils.py (referenced)
+https://github.com/cs230-stanford/cs230-code-examples
+https://www.github.com/kyubyong/dc_tts
+https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
 
