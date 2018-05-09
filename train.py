@@ -8,6 +8,7 @@ import os,sys
 import pdb
 
 import tensorflow as tf
+from tensorflow.python import debug as tf_debug
 from tqdm import tqdm
 from src.graph import ModelGraph
 from src.utils import Params

@@ -30,7 +30,7 @@ def load_vocab(params):
     idx2char = {idx: char for idx, char in enumerate(params.vocab)}
     return char2idx, idx2char
 
-def text_normalize(text,params):
+def text_normalize(text,params,remove_accents=True,ensure_fullstop=True):
     """
     Normalizes an input string based on params.vocab 
     
@@ -40,52 +40,68 @@ def text_normalize(text,params):
     Returns:
         text (str): Normalized text based on params.vocab
     """
-    text = ''.join(char for char in unicodedata.normalize('NFD', text)
-                           if unicodedata.category(char) != 'Mn') # Strip accents
+    if remove_accents:
+        text = ''.join(char for char in unicodedata.normalize('NFD', text)
+                               if unicodedata.category(char) != 'Mn') # Strip accents
+    else:
+        text = unicodedata.normalize('NFD',text)
 
     text = text.lower()
     text = re.sub("[^{}]".format(params.vocab), " ", text)
     text = re.sub("[ ]+", " ", text)
     return text
 
+def process_csv_file(csv_path,params,mode):
+    # Process text file containing file,labels
+    # Returns file_paths, text_lengths, texts (np.array of ints)
+
+    # Load vocabulary
+    char2idx, idx2char = load_vocab(params)   
+    fpaths, text_lengths, texts = [], [], []
+    lines = codecs.open(csv_path, 'r', 'utf-8').readlines()
+
+    print('Processing csv file with mode: {}'.format(mode))
+    for line in lines:
+        if mode=='LJSpeech':
+            fname, _, text = line.strip().split(params.transcript_csv_sep)[:3]
+            text = text_normalize(text,params) + params.end_token  # E: EOS
+        elif mode=='IndicTTSHindi':
+            fname, text = line.strip().split(params.transcript_csv_sep)[:2]
+            text = text_normalize(text,params,False) + params.end_token  # E: EOS           
+        fpath = os.path.join(params.wavs_dir_path,fname + ".wav")
+        fpaths.append(fpath)
+        text = [char2idx[char] for char in text]
+        text_lengths.append(len(text))
+        texts.append(np.array(text, np.int32).tostring())
+    return fpaths, text_lengths, texts   
+
+
 def load_data(params,mode="train",lines=None):
     '''Loads data
       Args:
           mode: "train" or "synthesize".
     '''
-    # Load vocabulary
-    char2idx, idx2char = load_vocab(params)
 
     if 'train' in mode or 'val' in mode:
         # toggle train/val datasets
         transcript_csv_path = params.transcript_csv_path_train if 'train' in mode else params.transcript_csv_path_val
-        # Parse
-        fpaths, text_lengths, texts = [], [], []
-        lines = codecs.open(transcript_csv_path, 'r', 'utf-8').readlines()
-        for line in lines:
-            fname, _, text = line.strip().split(params.transcript_csv_sep)[:3]
-            fpath = os.path.join(params.wavs_dir_path,fname + ".wav")
-            fpaths.append(fpath)
-            text = text_normalize(text,params) + params.end_token  # E: EOS
-            text = [char2idx[char] for char in text]
-            text_lengths.append(len(text))
-            texts.append(np.array(text, np.int32).tostring())
-        return fpaths, text_lengths, texts
+        return process_csv_file(transcript_csv_path,params,'IndicTTSHindi')
 
-    elif mode=='synthesize': # synthesize on unseen test text.
-        # Parse from a file
-        lines = codecs.open(params.test_data, 'r', 'utf-8').readlines()[1:]
-        sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
+    elif mode=='synthesize' or lines is not None: # inference mode on unseen test text
+        # Load vocabulary
+        char2idx, idx2char = load_vocab(params)   
+        if lines is None: # Reading from text file
+            lines = codecs.open(params.test_data, 'r', 'utf-8').readlines()[1:]
+            sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
+        else:             # Demo mode - direct list of sentences
+            sents = [text_normalize(line,params) + params.end_token for line in lines]       
 
-    elif lines is not None:
-        sents = [text_normalize(line,params) + params.end_token for line in lines]       
-
-    print("Loading test sentences: {}".format(sents))
-    max_len = max([len(sent) for sent in sents])
-    texts = np.zeros((len(sents), max_len), np.int32)
-    for i, sent in enumerate(sents):
-        texts[i, :len(sent)] = [char2idx[char] for char in sent]
-    return texts
+        print("Loading test sentences: {}".format(sents))
+        max_len = max([len(sent) for sent in sents])
+        texts = np.zeros((len(sents), max_len), np.int32)
+        for i, sent in enumerate(sents):
+            texts[i, :len(sent)] = [char2idx[char] for char in sent]
+        return texts
 
 def get_batch(params,mode,logger):
     """Loads training data and put them in queues"""
