@@ -51,13 +51,13 @@ def text_normalize(text,params,remove_accents=True,ensure_fullstop=True):
     text = re.sub("[ ]+", " ", text)
     return text
 
-def process_csv_file(csv_path,params,mode):
+def process_csv_file(csv_path,params,mode='IndicTTSHindi'):
     # Process text file containing file,labels
-    # Returns file_paths, text_lengths, texts (np.array of ints)
+    # Returns file_paths, text_lengths, indexes (np.array of ints)
 
     # Load vocabulary
     char2idx, idx2char = load_vocab(params)   
-    fpaths, text_lengths, texts = [], [], []
+    fpaths, text_lengths, indexes = [], [], []
     lines = codecs.open(csv_path, 'r', 'utf-8').readlines()
 
     print('Processing csv file with mode: {}'.format(mode))
@@ -72,8 +72,8 @@ def process_csv_file(csv_path,params,mode):
         fpaths.append(fpath)
         text = [char2idx[char] for char in text]
         text_lengths.append(len(text))
-        texts.append(np.array(text, np.int32).tostring())
-    return fpaths, text_lengths, texts   
+        indexes.append(np.array(text, np.int32).tostring())
+    return fpaths, text_lengths, indexes   
 
 
 def load_data(params,mode="train",lines=None):
@@ -98,10 +98,32 @@ def load_data(params,mode="train",lines=None):
 
         print("Loading test sentences: {}".format(sents))
         max_len = max([len(sent) for sent in sents])
-        texts = np.zeros((len(sents), max_len), np.int32)
+        indexes = np.zeros((len(sents), max_len), np.int32)
         for i, sent in enumerate(sents):
-            texts[i, :len(sent)] = [char2idx[char] for char in sent]
-        return texts
+            indexes[i, :len(sent)] = [char2idx[char] for char in sent]
+        return indexes
+
+def parse_tfrecord(serialized_inp):
+
+    reader = tf.TFRecordReader()
+
+    feature_struct = {
+        'fname': tf.FixedLenFeature([],tf.string),
+        'indexes': tf.FixedLenFeature([],tf.string),
+        'mel': tf.FixedLenFeature([],tf.string),
+        'mag': tf.FixedLenFeature([],tf.string),
+        'input-len': tf.FixedLenFeature([],tf.int64),
+        'mel-shape': tf.FixedLenFeature([2],tf.int64),
+        'mag-shape': tf.FixedLenFeature([2],tf.int64)
+    }    
+
+    features = tf.parse_single_example(serialized_inp,features=feature_struct) 
+
+    indexes = tf.decode_raw(features['indexes'],tf.int32)
+    mel = tf.reshape(tf.decode_raw(features['mel'],tf.float32),features['mel-shape'])
+    mag = tf.reshape(tf.decode_raw(features['mag'],tf.float32),features['mag-shape'])
+
+    return (indexes,mel,mag) 
 
 def get_batch(params,mode,logger):
     """Loads training data and put them in queues"""
@@ -109,7 +131,7 @@ def get_batch(params,mode,logger):
     with tf.device('/cpu:0'):
         # Load data
         logger.info('Loading in filenames from load_data with mode: {}'.format(mode))
-        fpaths, text_lengths, texts = load_data(params,mode) # list
+        fpaths, text_lengths, indexes = load_data(params,mode) # list
         maxlen, minlen = max(text_lengths), min(text_lengths)
 
         # Calc total batch count
@@ -117,11 +139,11 @@ def get_batch(params,mode,logger):
 
         # Create Queues
         shuffle_batch = False if 'val' in mode else True
-        fpath, text_length, text = tf.train.slice_input_producer([fpaths, text_lengths, texts], shuffle=shuffle_batch)
+        fpath, text_length, index = tf.train.slice_input_producer([fpaths, text_lengths, indexes], shuffle=shuffle_batch)
         logger.info('Created input queues for data, total num_batch: {}'.format(num_batch))
 
         # Parse
-        text = tf.decode_raw(text, tf.int32)  # (None,)
+        index = tf.decode_raw(index, tf.int32)  # (None,)
 
         if params.prepro:
             def _load_spectrograms(fpath):
@@ -138,15 +160,15 @@ def get_batch(params,mode,logger):
 
         # Add shape information
         fname.set_shape(())
-        text.set_shape((None,))
+        index.set_shape((None,))
         mel.set_shape((None, params.F))
         mag.set_shape((None, params.n_fft//2+1))
 
         # Batching
         bucket_sizes = [i for i in range(minlen + 1, maxlen - 1, (maxlen-minlen)//params.num_buckets)]
-        _, (texts, mels, mags, fnames) = tf.contrib.training.bucket_by_sequence_length(
+        _, (indexes, mels, mags, fnames) = tf.contrib.training.bucket_by_sequence_length(
                                             input_length=text_length,
-                                            tensors=[text, mel, mag, fname],
+                                            tensors=[index, mel, mag, fname],
                                             batch_size=params.batch_size,
                                             bucket_boundaries=bucket_sizes,
                                             num_threads=params.num_threads,
@@ -155,5 +177,5 @@ def get_batch(params,mode,logger):
         logger.info('Created {} bucketed queues from min/max len {}/{}, batch_size: {}, capacity: {}'.format(params.num_buckets,minlen,maxlen,
             params.batch_size,params.batch_size*params.Qbatch))
 
-    return texts, mels, mags, fnames, num_batch
+    return indexes, mels, mags, fnames, num_batch
 

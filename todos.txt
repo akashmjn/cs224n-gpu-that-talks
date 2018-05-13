@@ -1,8 +1,16 @@
 
+- Speed up training, use preprocessed npy files with td.data pipeline
+- implement dropout, layernorm / other training tricks
+- Document params file parameters
+- Fix queue parameter tuning during training / edit dsp_utils, data_load to use only TF API and use tf.data pipeline
+- Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
+
+Older (from CS224n)
+
 * TextEnc implementation:
     * implement, test highway conv
     * implement, test text_enc block
-    ? test initialization of highway conv layers
+    * test initialization of highway conv layers
 
 * Decoder implementation:
     * implement, test causal conv
@@ -13,6 +21,7 @@
 * Attention implementation:
     * implement basic attention mechanism
     * add, test guided attention loss
+    * test training with positional encoding
 
 * SSRN implementation:
     * implement, test transposed convolution
@@ -30,14 +39,6 @@
     * implement restoring of variables 
     * implement output feedback
 
-
 * Experimentation
     * modify attention with position encodings, w w/o guided attention
     ^ multi-task learning, joint optimization
-
-- Document params file parameters
-- Test training script 
-    for positional encoding
-- Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
-- Fix queue parameter tuning during training / edit dsp_utils, data_load to use only TF API and use tf.data pipeline
-- implement dropout, layernorm / other training tricks
