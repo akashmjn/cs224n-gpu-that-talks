@@ -8,7 +8,7 @@ from tensorflow.python import debug as tf_debug
 
 from .model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
 from .utils import set_logger, Params, learning_rate_decay, get_timing_signal_1d
-from .data_load import load_data, get_batch
+from .data_load import load_data, get_batch, get_batch_prepro
 
 
 class ModelGraph(object):
@@ -30,12 +30,22 @@ class ModelGraph(object):
         self.params = params
         self.logger = set_logger(os.path.join(self.params.log_dir,
                                     self.params.model_name+'_'+mode+'.log') ) # sets path for logging
-        with tf.variable_scope("gs"): # global step variable to track batch updates
-            self.global_step = tf.Variable(0, name='global_step', trainable=False)                  
+        # with tf.variable_scope("gs"): # global step variable to track batch updates
+        #     self.global_step = tf.Variable(0, name='global_step', trainable=False)                  
+        self.global_step = tf.train.get_global_step()
 
         # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
         if 'synthesize' not in mode: 
-            self.transcripts, self.Y, self.Z, self.fnames, self.num_batch = get_batch(params,mode,self.logger)
+            if hasattr(params,'prepro') and params.prepro:
+                # self.tfrecord_path = tf.placeholder(tf.string,name='tfrecord_path')
+                self.tfrecord_path = tf.constant(os.path.join(params.data_dir,'train.tfrecord'))
+                batch, self.iterator_init_op,\
+                self.num_train_batch, self.num_val_batch = get_batch_prepro(
+                        self.tfrecord_path,params,self.logger
+                    ) 
+                self.transcripts, self.Y, self.Z = batch['indexes'], batch['mels'], batch['mags']
+            else:
+                self.transcripts, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)
         if mode in ['train_text2mel','val_text2mel','synthesize']:
             self.build_text2mel(mode=mode,reuse=None) # TODO: maybe look at combined training?
         if mode in ['train_ssrn','val_ssrn','synthesize']:
@@ -196,8 +206,11 @@ class ModelGraph(object):
             self.gvs = self.optimizer.compute_gradients(self.loss)
             self.clipped = []
             for grad, var in self.gvs:
-                grad = tf.clip_by_value(grad, -self.params.grad_clip_value, self.params.grad_clip_value)
-                self.clipped.append((grad, var))
+                try:
+                    grad = tf.clip_by_value(grad, -self.params.grad_clip_value, self.params.grad_clip_value)
+                    self.clipped.append((grad, var))
+                except Exception as e:
+                    print(grad)
             self.grad_norm = tf.global_norm([g for g,v in self.clipped])
 
             tf.summary.scalar('train/lr',self.lr)

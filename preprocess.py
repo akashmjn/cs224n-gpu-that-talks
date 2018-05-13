@@ -17,6 +17,8 @@ def process_audio_pair(fpath,params,output_path):
     print("Processed: {}".format(fpath))
 
 def process_to_npy(params,input_path,csv_path,output_path):
+    # TODO: Parallelize / multiprocess this
+    
     # Processes all wav files in csv and saves extracted features as npy arrays
     # get list of file paths
     with open(csv_path) as f:
@@ -46,6 +48,7 @@ def _int64_list_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))   
 
 def process_to_tfrecord(params,input_path,csv_path,output_path):
+    # TODO: Parallelize / multiprocess this
 
     fpaths, text_lengths, indexes = process_csv_file(csv_path,params)
     # fpaths = [os.path.join(input_path,f) for f in fpaths]

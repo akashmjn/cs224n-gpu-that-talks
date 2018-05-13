@@ -68,7 +68,7 @@ def process_csv_file(csv_path,params,mode='IndicTTSHindi'):
         elif mode=='IndicTTSHindi':
             fname, text = line.strip().split(params.transcript_csv_sep)[:2]
             text = text_normalize(text,params,False) + params.end_token  # E: EOS           
-        fpath = os.path.join(params.wavs_dir_path,fname + ".wav")
+        fpath = os.path.join(params.data_dir,'wavs',fname + ".wav")
         fpaths.append(fpath)
         text = [char2idx[char] for char in text]
         text_lengths.append(len(text))
@@ -178,4 +178,36 @@ def get_batch(params,mode,logger):
             params.batch_size,params.batch_size*params.Qbatch))
 
     return indexes, mels, mags, fnames, num_batch
+
+def get_batch_prepro(tfrecord_path,params,logger):
+
+    # find total number of batches
+    num_batch_train = sum(1 for line in open(params.transcript_csv_path_train))//params.batch_size
+    num_batch_val = sum(1 for line in open(params.transcript_csv_path_val))//params.batch_size
+
+    padded_shapes = (
+            tf.TensorShape([None]),
+            tf.TensorShape([None,params.F]),
+            tf.TensorShape([None,params.Fo])
+        )
+
+    dataset = tf.data.TFRecordDataset([tfrecord_path])\
+                .shuffle(params.batch_size*10)\
+                .map(parse_tfrecord,params.num_threads)\
+                .padded_batch(params.batch_size,padded_shapes)\
+                .prefetch(1) # zero-padded batches: work for mels, mags, and indexes since vocab[0] is P
+
+    iterator = dataset.make_initializable_iterator()
+    indexes, mels, mags = iterator.get_next()
+
+    # indexes.set_shape((None,None))
+    mels.set_shape((None,None,params.F))
+    mags.set_shape((None,None,params.Fo))
+    logger.info('Created iterators over tensors of shape: {} {} {}'.format(
+            indexes.shape, mels.shape, mags.shape
+        ))
+    batch = {'indexes':indexes,'mels':mels,'mags':mags}
+    iterator_init_op = iterator.initializer
+
+    return batch, iterator_init_op, num_batch_train, num_batch_val
 
