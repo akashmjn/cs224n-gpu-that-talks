@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # sv = tf.train.Supervisor(logdir=params.log_dir, save_model_secs=0, global_step=gs)
     # with sv.managed_session() as sess:
     scaffold = tf.train.Scaffold(local_init_op=tf.group(
-        tf.local_variables_initializer(), tf.global_variables_initializer(), g.iterator_init_op)
+        g.iterator_init_op)
         # init_feed_dict={g.tfrecord_path:train_tfrecord_path}
     )
 
