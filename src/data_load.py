@@ -92,7 +92,10 @@ def load_data(params,mode="train",lines=None):
         char2idx, idx2char = load_vocab(params)   
         if lines is None: # Reading from text file
             lines = codecs.open(params.test_data, 'r', 'utf-8').readlines()[1:]
-            sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
+            if "hindi" in params.data_dir.lower():
+                sents = [text_normalize(line.split(" ",1)[-1],params,False).strip() + params.end_token for line in lines]
+            else:
+                sents = [text_normalize(line.split(" ", 1)[-1],params).strip() + params.end_token for line in lines] # text normalization, E: EOS
         else:             # Demo mode - direct list of sentences
             sents = [text_normalize(line,params) + params.end_token for line in lines]       
 
