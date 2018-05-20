@@ -126,6 +126,7 @@ def parse_tfrecord(serialized_inp):
     indexes = tf.decode_raw(features['indexes'],tf.int32)
     mel = tf.reshape(tf.decode_raw(features['mel'],tf.float32),features['mel-shape'])
     mag = tf.reshape(tf.decode_raw(features['mag'],tf.float32),features['mag-shape'])
+    mel = tf.pad(mel,[[0,3],[0,0]]) # pad some end silence to get model to learn to stop 
     mel_mask = tf.ones(tf.cast(features['mel-shape'],tf.int32),tf.float32)
 
     return (indexes,mel,mag,mel_mask) 
