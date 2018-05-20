@@ -28,6 +28,7 @@ class ModelGraph(object):
             mode (str): Either of 'train_text2mel', 'train_ssrn', or 'synthesize'
         """
         self.params = params
+        self.mode = mode
         self.logger = set_logger(os.path.join(self.params.log_dir,
                                     self.params.model_name+'_'+mode+'.log') ) # sets path for logging
         # with tf.variable_scope("gs"): # global step variable to track batch updates
@@ -44,47 +45,49 @@ class ModelGraph(object):
                         self.tfrecord_path,params,self.logger
                     ) 
                 self.transcripts, self.Y, self.Z, self.Y_mask = batch['indexes'], batch['mels'], batch['mags'], batch['mels_mask']
+                self.Y_stop_labels = 1 - self.Y_mask[:,:,0] # 0 when data exists, 1 when padded
             else:
                 self.transcripts, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)
         if mode in ['train_text2mel','val_text2mel','synthesize']:
-            self.build_text2mel(mode=mode,reuse=None) # TODO: maybe look at combined training?
+            self.build_text2mel(reuse=None) # TODO: maybe look at combined training?
         if mode in ['train_ssrn','val_ssrn','synthesize']:
-            self.build_ssrn(mode,reuse=None)
+            self.build_ssrn(reuse=None)
         tf.summary.merge_all()
 
-    def build_ssrn(self,mode,reuse=None):
+    def build_ssrn(self,reuse=None):
         """
         Creates graph for the SSRN model for either training or inference
         During training, takes true mels Y as input with target as the true mag Z
         """
-        assert mode in ['train_ssrn','val_ssrn','synthesize']
+        assert self.mode in ['train_ssrn','val_ssrn','synthesize']
         self.logger.info('Building training graph for SSRN ...')
 
-        if mode in ['train_ssrn','val_ssrn']:
+        if self.mode in ['train_ssrn','val_ssrn']:
             self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse) # input, labels: true mels, mags
-            self.add_loss_op(mode)
+            self.add_loss_op()
             self.add_train_op()
             tf.summary.image('train/mag_target', tf.expand_dims(tf.transpose(self.Z[:1], [0, 2, 1]), -1))
             tf.summary.image('train/mag_hat', tf.expand_dims(tf.transpose(self.Zhat[:1], [0, 2, 1]), -1))
             tf.summary.image('train/mel_inp', tf.expand_dims(tf.transpose(self.Y[:1], [0, 2, 1]), -1))
             tf.summary.histogram('train/Zhat',self.Zhat)           
-        elif mode=='synthesize':
+        elif self.mode=='synthesize':
             self.Zlogit, self.Zhat = SSRNBlock(self.Yhat,self.params.c,self.params.Fo,reuse=reuse) # input: generated mels
 
-    def build_text2mel(self,mode,reuse=None):
+    def build_text2mel(self,reuse=None):
         """
         Creates graph for either training or inference. During training, one-previous shifted targets 
         are used as the feedback input S. During inference (synthesis) a variable time-length input 
         consisting of mel frames generated so far is used as input.  
         """
-        assert mode in ['train_text2mel','val_text2mel','synthesize']
+        assert self.mode in ['train_text2mel','val_text2mel','synthesize']
         # building training graph for Text2Mel
         self.logger.info('Building training graph for Text2Mel ...')       
 
-        if mode in ['train_text2mel','val_text2mel']:
+        if self.mode in ['train_text2mel','val_text2mel']:
             self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
-        elif mode=='synthesize':
+        elif self.mode=='synthesize':
             self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
+            self.last_attended = tf.placeholder(dtype=tf.int32,shape=[self.params.batch_size]) # batch_size with int indexes 
             self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
 
         self.add_input_embeddings(reuse)
@@ -95,8 +98,8 @@ class ModelGraph(object):
             self.logger.info('Initialized position encodings, shapes: {}, {}'.format(self.K_pos.shape,self.Q_pos.shape))
 
         self.add_predict_op(reuse)
-        if mode in ['train_text2mel','val_text2mel']:
-            self.add_loss_op(mode)
+        if self.mode in ['train_text2mel','val_text2mel']:
+            self.add_loss_op()
             self.add_train_op()
 
     def add_input_embeddings(self,reuse=None):
@@ -147,20 +150,24 @@ class ModelGraph(object):
             self.K = self.K + self.K_pos[0,:tf.shape(self.K)[1],:]
             self.Q = self.Q + self.Q_pos[0,:tf.shape(self.Q)[1],:]
 
-        self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
+        if self.mode=='synthesize':
+            self.A , self.R = AttentionBlock(self.K, self.V, self.Q,
+                last_attended=self.last_attended,attn_window_size=self.params.attn_window_size)
+        else:
+            self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
         self.logger.info('Encoded R with dim: {}'.format(self.R.shape))
         self.RQ = tf.concat([self.R, self.Q],axis=2)
         self.logger.info('Concatenated RQ with dim: {}'.format(self.RQ.shape))
-        self.Ylogit, self.Yhat = AudioDecBlock(self.RQ,self.params.F)
+        self.Ylogit, self.Yhat, self.YStoplogit = AudioDecBlock(self.RQ,self.params.F)
         self.logger.info('Decoded Yhat with dim: {}'.format(self.Yhat.shape))
     
         return self.Ylogit, self.Yhat
     
-    def add_loss_op(self,mode):
+    def add_loss_op(self):
     
-        if 'ssrn' in mode:
+        if 'ssrn' in self.mode:
             target, pred, logit, sumlabel = self.Z, self.Zhat, self.Zlogit, 'train/Z'
-        elif 'text2mel' in mode:
+        elif 'text2mel' in self.mode:
             target, pred, logit, sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
             tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
 
@@ -173,10 +180,13 @@ class ModelGraph(object):
                 tf.nn.sigmoid_cross_entropy_with_logits(labels=target,logits=logit)*self.Y_mask
             )/tf.reduce_sum(self.Y_mask)     # padded batches are masked
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
-        self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss
+        self.stop_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y_stop_labels,logits=self.YStoplogit)
+            )                                # stop predictions are not masked 
+        self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss + self.stop_loss
 
         # guided attention loss from Tachibana et. al (2017)
-        if self.params.attention_mode =='guided' and 'ssrn' not in mode:
+        if self.params.attention_mode =='guided' and 'ssrn' not in self.mode:
             # A (shape: batch_size, N, T) - these dimensions are fixed for a single padded batch
             N, T = tf.cast(tf.shape(self.A)[1],tf.float32), tf.cast(tf.shape(self.A)[2],tf.float32)
             W = tf.fill(tf.shape(self.A),0.0) # weight matrix to be multiplied with A

@@ -54,6 +54,9 @@ if __name__ == '__main__':
                 if global_step % 50==0:
                     logger.info('Training loss at step {}: {:.4f}, L1: {:.4f}, CE: {:.4f}'.format(
                         global_step,loss_out, L1_out, CE_out))
+
+            if global_step > params.num_steps:
+                break                   
     
                 # # Write checkpoint files at every 1k steps
                 # if global_step % 1000 == 0:
@@ -68,9 +71,5 @@ if __name__ == '__main__':
             # for _ in tqdm(range(g.num_val_batch), total=g.num_val_batch, ncols=70, leave=False, unit='b'):
             #     # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             #     loss_out, L1_out, CE_out, attn_loss = sess.run([g.loss, g.L1_loss, g.CE_loss, g.attn_loss])
-
-            if global_step > params.num_steps:
-                break
-
 
     logger.info('Completed {} steps!'.format(global_step))

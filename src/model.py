@@ -266,30 +266,56 @@ def AudioDecBlock(RQ,F,scope='AudioDecBlock'):
             conv_params["filters"] = F
             Ylogit = conv1d(L5,**conv_params)
             Yhat = tf.nn.sigmoid(Ylogit) # sigmoid(conv) output layer
+        
+        with tf.variable_scope('Stop_FC'): # stop prediction 
+            YStoplogit = tf.squeeze(tf.layers.dense(inputs=RQ,units=1,activation=None)) # dim: batch_size, T
 
-    return Ylogit, Yhat
+    return Ylogit, Yhat, YStoplogit
 
 
-def AttentionBlock(K,V,Q,scope='AttentionBlock'):
+def AttentionBlock(K,V,Q,scope='AttentionBlock',last_attended=None,attn_window_size=None):
     """
     Implements a scaled key-value dot product attention mechanism as in Tachibana et. al (2017)
 
     Args:
-        KV (tf.tensor): Concatenated tensor of K,V (shape: batch_size, N, 2*d)
+        K,V (tf.tensor): Tensors of K,V (shape: batch_size, N, 2*d)
         Q (tf.tensor): Encoding of feedback input from AudioEnd block (shape: batch_size, T, d)
+        last_attended: Tensor containing int index of K, V previously attended to. Used for constrained
+                        monotonic attention softmax at inference 
 
     Returns:
         A (tf.tensor): shape TxN tensor of allignment between K and Q
         R (tf.tensor): output from V based on attention (shape: batch_size, T, d)
     """
 
-    # TODO: Add a variable scope here
-    d = Q.shape.as_list()[2]
-    # K,V = KV[:,:,:d], KV[:,:,d:] # splitting out into blocks
-
-    A = tf.nn.softmax(tf.matmul(Q,
-                      tf.transpose(K,[0,2,1]))/tf.sqrt(tf.cast(d,tf.float32))) # scaled d.p. attention
-    R = tf.matmul(A,V)
+    with tf.variable_scope(scope):
+        d = Q.shape.as_list()[2]
+        # K,V = KV[:,:,:d], KV[:,:,d:] # splitting out into blocks
+    
+        if last_attended is None:
+            A = tf.nn.softmax(tf.matmul(Q,
+                              tf.transpose(K,[0,2,1]))/tf.sqrt(tf.cast(d,tf.float32))) # scaled d.p. attention
+            R = tf.matmul(A,V)
+        else:
+            n_batch = last_attended.shape[0]
+            batch_idx_tiled = tf.tile(
+                tf.expand_dims(tf.range(
+                    n_batch,dtype=tf.int32
+                    ),axis=1),[1,attn_window_size],
+                    name='batch_idx_tiled'
+                ) # dimension: (batch_size, attn_window_size)
+            attn_idx_range = tf.map_fn(
+                    lambda x: tf.range(x,x+attn_window_size,dtype=tf.int32),
+                    last_attended,
+                    name = 'attn_idx_range'
+                ) # dimension: (batch_size, attn_window_size)
+            gather_idxs = tf.stack([batch_idx_tiled,attn_idx_range],axis=2,name='gather_idxs')
+            K_window, V_window = tf.gather_nd(K,gather_idxs), tf.gather_nd(V,gather_idxs)
+            A = tf.nn.softmax(tf.matmul(Q,
+                                  tf.transpose(K_window,[0,2,1])
+                                    )/tf.sqrt(tf.cast(d,tf.float32))
+                              ) # scaled d.p. attention
+            R = tf.matmul(A,V_window)
 
     return A, R
 
