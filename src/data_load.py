@@ -107,6 +107,7 @@ def load_data(params,mode="train",lines=None):
         return indexes
 
 def parse_tfrecord(serialized_inp):
+    # TODO: add support for randomly sampling mag patches for SSRN
 
     reader = tf.TFRecordReader()
 
@@ -125,8 +126,9 @@ def parse_tfrecord(serialized_inp):
     indexes = tf.decode_raw(features['indexes'],tf.int32)
     mel = tf.reshape(tf.decode_raw(features['mel'],tf.float32),features['mel-shape'])
     mag = tf.reshape(tf.decode_raw(features['mag'],tf.float32),features['mag-shape'])
+    mel_mask = tf.ones(tf.cast(features['mel-shape'],tf.int32),tf.float32)
 
-    return (indexes,mel,mag) 
+    return (indexes,mel,mag,mel_mask) 
 
 def get_batch(params,mode,logger):
     """Loads training data and put them in queues"""
@@ -191,25 +193,28 @@ def get_batch_prepro(tfrecord_path,params,logger):
     padded_shapes = (
             tf.TensorShape([None]),
             tf.TensorShape([None,params.F]),
-            tf.TensorShape([None,params.Fo])
+            tf.TensorShape([None,params.Fo]),
+            tf.TensorShape([None,params.F])
         )
 
     dataset = tf.data.TFRecordDataset([tfrecord_path])\
                 .shuffle(params.batch_size*10)\
                 .map(parse_tfrecord,params.num_threads)\
                 .padded_batch(params.batch_size,padded_shapes)\
-                .prefetch(1) # zero-padded batches: work for mels, mags, and indexes since vocab[0] is P
+                .prefetch(1) # pads with 0s: works for mels, mags, and indexes since vocab[0] is P
 
     iterator = dataset.make_initializable_iterator()
-    indexes, mels, mags = iterator.get_next()
+    indexes, mels, mags, mel_mask = iterator.get_next()
 
     # indexes.set_shape((None,None))
     mels.set_shape((None,None,params.F))
     mags.set_shape((None,None,params.Fo))
-    logger.info('Created iterators over tensors of shape: {} {} {}'.format(
-            indexes.shape, mels.shape, mags.shape
+    mel_mask.set_shape((None,None,params.F))
+    logger.info('Created iterators over tensors of shape: {} {} {}, mask:{}'.format(
+            indexes.shape, mels.shape, mags.shape, mel_mask.shape
         ))
-    batch = {'indexes':indexes,'mels':mels,'mags':mags}
+    # TODO: add a mask
+    batch = {'indexes':indexes,'mels':mels,'mags':mags,'mels_mask':mel_mask}
     iterator_init_op = iterator.initializer
 
     return batch, iterator_init_op, num_batch_train, num_batch_val

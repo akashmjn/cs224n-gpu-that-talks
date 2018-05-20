@@ -4,6 +4,7 @@ General Implementation:
 - Speed up training, use preprocessed npy files with td.data pipeline
     * Implement dataset preprocessing
     * Implement tf.data.Dataset based training / validation pipeline
+    - Implement bug fix: loss masking for padded batches (text2mel,ssrn)
     - Fix feedable iterator hack for validation data pipeline 
     - Implement bucketed batches 
 - Implement direct transfer learning 

@@ -43,7 +43,7 @@ class ModelGraph(object):
                 self.num_train_batch, self.num_val_batch = get_batch_prepro(
                         self.tfrecord_path,params,self.logger
                     ) 
-                self.transcripts, self.Y, self.Z = batch['indexes'], batch['mels'], batch['mags']
+                self.transcripts, self.Y, self.Z, self.Y_mask = batch['indexes'], batch['mels'], batch['mags'], batch['mels_mask']
             else:
                 self.transcripts, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)
         if mode in ['train_text2mel','val_text2mel','synthesize']:
@@ -165,9 +165,13 @@ class ModelGraph(object):
             tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
 
         # compute loss (without guided attention loss for now)
-        self.L1_loss = tf.reduce_mean(tf.abs(target-pred))
+        self.L1_loss = tf.reduce_sum(
+                tf.abs(target-pred)*self.Y_mask
+                )/tf.reduce_sum(self.Y_mask) # padded batches are masked
         assert len(self.L1_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.L1_loss.shape)
-        self.CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=target,logits=logit))
+        self.CE_loss = tf.reduce_sum(
+                tf.nn.sigmoid_cross_entropy_with_logits(labels=target,logits=logit)*self.Y_mask
+            )/tf.reduce_sum(self.Y_mask)     # padded batches are masked
         assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
         self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss
 
