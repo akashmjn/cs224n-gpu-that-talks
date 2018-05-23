@@ -86,20 +86,20 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
     
         # create flags indicating if and where each input in batch has stopped
         stop_flags = np.array([False]*n_batch)
-        stop_idxs = np.zeros((n_batch,))
+        stop_idxs = np.zeros((n_batch,),dtype=int)
 
         # Generate all the mel frames
         # TODO: Fix constrained monotonic attention 
         for i in range(1,params.max_T):
             if all(stop_flags): break # end of audio for all inputs in batch
 
-            print(last_attended)
             print('Mel frame {}/{}'.format(i+1,params.max_T),end='\r')
             prev_slice = output_mel[:,:i,:]
 
-            model_preds, stop_preds = sess.run([g.Yhat,g.YStoplogit]) 
+            model_preds, stop_preds = sess.run([g.Yhat,g.YStoplogit],{g.S:prev_slice,g.transcripts:input_arr}) 
             # threshold 0.5 for stop sigmoid output
-            stop_preds = stop_preds > 0.0
+            if len(stop_preds.shape)>1: stop_preds = stop_preds[:,-1] # stop_preds is dim: n_batch, T
+            stop_preds = stop_preds > 0.0 
             for j,stop_pred in enumerate(stop_preds):
                 if stop_pred and not stop_flags[j]: # encountering for first time
                     stop_idxs[j] = i

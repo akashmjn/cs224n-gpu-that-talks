@@ -50,7 +50,7 @@ def _int64_list_feature(value):
 def process_to_tfrecord(params,input_path,csv_path,output_path):
     # TODO: Parallelize / multiprocess this
 
-    fpaths, text_lengths, indexes = process_csv_file(csv_path,params)
+    fpaths, text_lengths, indexes = process_csv_file(csv_path,params,mode='LJSpeech')
     # fpaths = [os.path.join(input_path,f) for f in fpaths]
 
     if 'train' in csv_path:
