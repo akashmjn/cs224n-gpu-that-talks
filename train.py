@@ -55,6 +55,8 @@ if __name__ == '__main__':
                     logger.info('Training loss at step {}: {:.4f}, L1: {:.4f}, CE: {:.4f}'.format(
                         global_step,loss_out, L1_out, CE_out))
 
+            print(global_step)
+
             if global_step > params.num_steps:
                 break                   
     

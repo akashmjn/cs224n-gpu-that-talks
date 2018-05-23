@@ -1,23 +1,24 @@
 
 General Implementation: 
 
-- Speed up training, use preprocessed npy files with td.data pipeline
+- Data pipeline 
     * Implement dataset preprocessing
     * Implement tf.data.Dataset based training / validation pipeline
+    * Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
     - Fix feedable iterator hack for validation data pipeline 
     - Implement bucketed batches 
 - Other improvements/bugfixes
     * Implement fix: loss masking for padded batches (text2mel,ssrn)
     * Implement stop prediction
+    - Implement inference with stop prediction
     - Implement constrained attention at inference
     - Globally use only params.data_dir, remove wav, csv, other path specifications
-- Implement direct transfer learning 
-- Implement partial loading of ljspeech model 
-
-- implement dropout, layernorm / other training tricks
-- Document params file parameters
-* Fix queue parameter tuning during training / edit dsp_utils, data_load to use only TF API and use tf.data pipeline
-* Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
+    - implement dropout, layernorm / other training tricks
+- For Transfer learning experiments    
+    - Implement partial loading of ljspeech model 
+    - Implement direct transfer learning 
+- Documentation
+    - Document params file parameters
 
 Core Implementations:
 
@@ -56,7 +57,7 @@ Core Implementations:
 Experimentation:
 
 - Indic
-    - Rerun baseline training from scratch with tf.data pipeline
+    - Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
     - Fine-tune pretrained model from LJSpeech (hyperparam search)
 
 - LJSpeech 

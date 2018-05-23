@@ -87,7 +87,7 @@ class ModelGraph(object):
             self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
         elif self.mode=='synthesize':
             self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
-            self.last_attended = tf.placeholder(dtype=tf.int32,shape=[self.params.batch_size]) # batch_size with int indexes 
+            # self.last_attended = tf.placeholder(dtype=tf.int32,shape=[self.params.batch_size]) # batch_size with int indexes 
             self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
 
         self.add_input_embeddings(reuse)
@@ -151,8 +151,9 @@ class ModelGraph(object):
             self.Q = self.Q + self.Q_pos[0,:tf.shape(self.Q)[1],:]
 
         if self.mode=='synthesize':
-            self.A , self.R = AttentionBlock(self.K, self.V, self.Q,
-                last_attended=self.last_attended,attn_window_size=self.params.attn_window_size)
+            # self.A , self.R = AttentionBlock(self.K, self.V, self.Q,
+            #     last_attended=self.last_attended,attn_window_size=self.params.attn_window_size)
+            self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
         else:
             self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
         self.logger.info('Encoded R with dim: {}'.format(self.R.shape))
