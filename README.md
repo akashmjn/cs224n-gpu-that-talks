@@ -17,7 +17,7 @@ As discussed in the report, we can get fairly decent audio quality with Text2Mel
 ### Directory Structure
 
 ```
- - runs (contains different params.json files and logs/model checkpoints for different runs/params)
+ - runs (contains checkpoints and params.json file for each different run. params.json specifies various hyperameters: see params-examples folder)
     - run1/params.json ...
  - src (implementation code package)
  - sentences (contains test sentences in .txt files)
