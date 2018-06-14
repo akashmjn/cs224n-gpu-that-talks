@@ -10,7 +10,7 @@ General Implementation:
 - Other improvements/bugfixes
     * Implement fix: loss masking for padded batches (text2mel,ssrn)
     * Implement stop prediction
-    - Implement inference with stop prediction
+    - Implement inference with stop prediction (fix mag generation)
     - Implement constrained attention at inference
     - Globally use only params.data_dir, remove wav, csv, other path specifications
     - implement dropout, layernorm / other training tricks
@@ -56,10 +56,13 @@ Core Implementations:
 
 Experimentation:
 
+- General
+    - Generate train / validation evaluation loss numbers 
 - Indic
-    - Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
+    * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
     - Fine-tune pretrained model from LJSpeech (hyperparam search)
 
 - LJSpeech 
+    * Retrain M4 model with masked loss, stop predictions
     * modify attention with position encodings, w w/o guided attention
     ^ multi-task learning, joint optimization
