@@ -10,7 +10,7 @@ import pdb
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from tqdm import tqdm
-from src.graph import ModelGraph
+from src.graph import ModelGraph, UnsupervisedGraph
 from src.utils import Params
 
 
@@ -30,11 +30,12 @@ if __name__ == '__main__':
     # train_tfrecord_path = str(os.path.join(params.data_dir,'train.tfrecord'))
 
     gs = tf.train.get_or_create_global_step() 
-    g = ModelGraph(params,args.mode)
+    # g = ModelGraph(params,args.mode)
+    g = UnsupervisedGraph(params,args.mode)
     logger = g.logger
 
     ### Hack-y approach to partial loading/transfer learning with MonitoredTrainingSession
-    if hasattr(args,'chkp'):
+    if hasattr(args,'chkp') and args.chkp:
         # restore everything except for input embeddings (which will vary based on vocab)
         # NOTE: init_fn of scaffold is only called if params.log_dir does not contain any checkpoints
         with tf.variable_scope('TransferLearnOps'):
@@ -51,10 +52,7 @@ if __name__ == '__main__':
     # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
     with tf.train.MonitoredTrainingSession(
         scaffold=scaffold,checkpoint_dir=params.log_dir,hooks=hooks) as sess:
-        # training steps 
-        # sess.run(g.iterator_init_op,
-        #              feed_dict={g.tfrecord_path:train_tfrecord_path}
-        #          )
+
         while not sess.should_stop():
             sess.run(g.iterator_init_op)
             g.logger.info('Initialized iterator')                          
@@ -68,13 +66,17 @@ if __name__ == '__main__':
                 if sess.should_stop(): break # end condition 
     
             print(global_step)
-    
-                # # validation steps
-                # sess.run(g.iterator_init_op,
-                #         {g.tfrecord_path:os.path.join(params.data_dir,'val.tfrecord')}
-                #     )           
-                # for _ in tqdm(range(g.num_val_batch), total=g.num_val_batch, ncols=70, leave=False, unit='b'):
-                #     # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-                #     loss_out, L1_out, CE_out, attn_loss = sess.run([g.loss, g.L1_loss, g.CE_loss, g.attn_loss])
+
+            # training steps 
+            # sess.run(g.iterator_init_op,
+            #              feed_dict={g.tfrecord_path:train_tfrecord_path}
+            #          )           
+            # # validation steps
+            # sess.run(g.iterator_init_op,
+            #         {g.tfrecord_path:os.path.join(params.data_dir,'val.tfrecord')}
+            #     )           
+            # for _ in tqdm(range(g.num_val_batch), total=g.num_val_batch, ncols=70, leave=False, unit='b'):
+            #     # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+            #     loss_out, L1_out, CE_out, attn_loss = sess.run([g.loss, g.L1_loss, g.CE_loss, g.attn_loss])
 
     logger.info('Completed {} steps!'.format(global_step))

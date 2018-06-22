@@ -10,13 +10,14 @@ General Implementation:
 - Other improvements/bugfixes
     * Implement fix: loss masking for padded batches (text2mel,ssrn)
     * Implement stop prediction
-    - Implement inference with stop prediction (fix mag generation)
-    - Implement constrained attention at inference
     - Globally use only params.data_dir, remove wav, csv, other path specifications
     - implement dropout, layernorm / other training tricks
 - For Transfer learning experiments    
-    - Implement partial loading of ljspeech model 
-    - Implement direct transfer learning 
+    * Implement direct transfer learning 
+    * Implement partial loading of ljspeech model 
+    - Modify training graph for unsupervised training
+    - Modify data loader to use both languages 
+
 - Documentation
     - Document params file parameters
 
@@ -44,7 +45,7 @@ Core Implementations:
     * modify build graph
     * modify data pipeline for faster patch-based training 
 
-* Test full data pipeline with kyubyong loaders + 230 training framework
+* Misc implementation: 
     * predict_op, loss_op
     * train_op, train/predict on batch
     * training, checkpointing, evaluation framework
@@ -53,6 +54,8 @@ Core Implementations:
 * Inference/Synthesis graph 
     * implement restoring of variables 
     * implement output feedback
+    - Fix inference with stop prediction (crop mag generation)
+    - Implement constrained attention at inference
 
 Experimentation:
 
@@ -60,7 +63,9 @@ Experimentation:
     - Generate train / validation evaluation loss numbers 
 - Indic
     * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
-    - Fine-tune pretrained model from LJSpeech (hyperparam search)
+    * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
+    - Unsupervised training on mixed language audio    
+    - Transfer learning with unsupervised initialization
 
 - LJSpeech 
     * Retrain M4 model with masked loss, stop predictions
