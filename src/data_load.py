@@ -202,7 +202,6 @@ def get_batch_prepro(tfrecord_path,params,logger):
         )
 
     dataset = tf.data.TFRecordDataset([tfrecord_path])\
-                .shuffle(params.batch_size*10)\
                 .map(parse_tfrecord,params.num_threads)\
                 .padded_batch(params.batch_size,padded_shapes)\
                 .prefetch(1) # pads with 0s: works for mels, mags, and indexes since vocab[0] is P
