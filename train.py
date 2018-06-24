@@ -49,6 +49,7 @@ if __name__ == '__main__':
             restored_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, args.vars)
             saver = tf.train.Saver(var_list=restored_vars)       
         def restore_pretrained_vars(scaffold,sess):
+            logger.info("Restoring pretrained variables {} from {}".format(args.vars,args.chkp))
             saver.restore(sess, tf.train.latest_checkpoint(args.chkp))
             print("Text2Mel pretrained variables restored!")       
         scaffold = tf.train.Scaffold(local_init_op=g.iterator_init_op,init_fn = restore_pretrained_vars)
