@@ -41,10 +41,9 @@ if __name__ == '__main__':
         raise Exception('Unsupported mode')
     logger = g.logger
 
-    ### Hack-y approach to partial loading/transfer learning with MonitoredTrainingSession
+    ### partial loading/transfer learning with MonitoredTrainingSession 
     if args.chkp:
         # restore everything except for input embeddings (which will vary based on vocab)
-        # NOTE: init_fn of scaffold is only called if params.log_dir does not contain any checkpoints
         with tf.variable_scope('TransferLearnOps'):
             restored_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, args.vars)
             saver = tf.train.Saver(var_list=restored_vars)       
@@ -52,6 +51,7 @@ if __name__ == '__main__':
             logger.info("Restoring pretrained variables {} from {}".format(args.vars,args.chkp))
             saver.restore(sess, tf.train.latest_checkpoint(args.chkp))
             print("Text2Mel pretrained variables restored!")       
+        # NOTE: init_fn of scaffold is only called if params.log_dir does not contain any checkpoints
         scaffold = tf.train.Scaffold(local_init_op=g.iterator_init_op,init_fn = restore_pretrained_vars)
     else:
         scaffold = tf.train.Scaffold(local_init_op=g.iterator_init_op)   
@@ -67,7 +67,6 @@ if __name__ == '__main__':
             for _ in tqdm(range(g.num_train_batch), total=g.num_train_batch, ncols=70, leave=False, unit='b'):
                 _, global_step, loss_out, L1_out, CE_out = sess.run([g.train_op, gs,
                                                                             g.loss, g.L1_loss, g.CE_loss])
-    
                 if global_step % 50==0:
                     logger.info('Training loss at step {}: {:.4f}, L1: {:.4f}, CE: {:.4f}'.format(
                         global_step,loss_out, L1_out, CE_out))

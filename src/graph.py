@@ -22,7 +22,7 @@ class ModelGraph(object):
         self._add_loss_op()
         self._add_train_op()
         self._add_inference_op()
-        self._add_tboard_tensor_summaries()
+        self._add_tboard_summaries()
 
     def _add_data_input(self):
         pass
@@ -88,7 +88,7 @@ class ModelGraph(object):
             Q_pos = get_timing_signal_1d(self.params.max_T,self.params.d)
         return K_pos, Q_pos       
 
-    def _add_tboard_tensor_summaries(self):
+    def _add_tboard_summaries(self):
         pass
 
 class ModelTrainGraph(ModelGraph):
@@ -129,7 +129,6 @@ class ModelTrainGraph(ModelGraph):
                 W = W + tf.expand_dims(tf.range(N),1)/N - tf.expand_dims(tf.range(T),0)/T # using broadcasting for mat + col - row
                 self.W_att = 1.0 - tf.exp(-tf.square(W)/(2*0.2)**2) # using g=0.2 from paper
                 self.att_loss = tf.reduce_mean(tf.multiply(self.A,self.W_att))
-                tf.summary.scalar('train/att_loss',self.att_loss)
                 self.loss = self.loss + self.att_loss
                 self.logger.info('Added guided attention loss over A: {}'.format(self.A))       
 
@@ -146,21 +145,26 @@ class ModelTrainGraph(ModelGraph):
                     self.clipped.append((grad, var))
                 except Exception as e:
                     print(grad)
-            self.grad_norm = tf.global_norm([g for g,v in self.clipped])
-            tf.summary.scalar('train/lr',self.lr)
-            tf.summary.scalar('train/grad_global_norm',self.grad_norm)
         self.train_op = self.optimizer.apply_gradients(self.clipped, global_step=self.global_step) # increments gs             
 
-    def _add_tboard_tensor_summaries(self):
+    def _add_tboard_summaries(self):
+        self._add_basic_summaries()
+        self._add_additional_summaries()
+        tf.summary.merge_all()
+
+    def _add_basic_summaries(self):
         tf.summary.image(self._tboard_label+'_target', tf.expand_dims(tf.transpose(self.target[:1], [0, 2, 1]), -1))
         tf.summary.image(self._tboard_label+'_pred', tf.expand_dims(tf.transpose(self.pred[:1], [0, 2, 1]), -1))
         tf.summary.histogram(self._tboard_label+'_target',self.target)
         tf.summary.histogram(self._tboard_label+'_logit',self.logit)
         tf.summary.histogram(self._tboard_label+'_pred',self.pred)
+        tf.summary.scalar('train/lr',self.lr)
         tf.summary.scalar('train/L1_loss',self.L1_loss)
         tf.summary.scalar('train/CE_loss',self.CE_loss)
-        tf.summary.scalar('train/total_loss',self.loss)       
-        tf.summary.merge_all()
+        tf.summary.scalar('train/total_loss',self.loss)                     
+
+    def _add_additional_summaries(self):
+        pass
 
 class Text2MelTrainGraph(ModelTrainGraph):
 
@@ -175,6 +179,24 @@ class Text2MelTrainGraph(ModelTrainGraph):
         tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
         self._add_audio_decoder()
         self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
+
+    def _add_additional_summaries(self):
+        if self.attention_mode == 'guided':
+            tf.summary.scalar('train/att_loss',self.att_loss)
+    
+        with tf.variable_scope('GradSummaries'):
+            embed_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,'InputEmbed')
+            textenc_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,'TextEnc')
+            audioenc_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,'AudioEnc')
+            audiodec_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,'AudioDec')
+            grad_norm_embed = tf.global_norm([g for g,v in self.clipped if v in embed_vars])
+            grad_norm_textenc = tf.global_norm([g for g,v in self.clipped if v in textenc_vars])
+            grad_norm_audioenc = tf.global_norm([g for g,v in self.clipped if v in audioenc_vars])
+            grad_norm_audiodec = tf.global_norm([g for g,v in self.clipped if v in audiodec_vars])
+            tf.summary.scalar('train/grad_norm_embed',grad_norm_embed)
+            tf.summary.scalar('train/grad_norm_textenc',grad_norm_textenc)
+            tf.summary.scalar('train/grad_norm_audioenc',grad_norm_audioenc)
+            tf.summary.scalar('train/grad_norm_audiodec',grad_norm_audiodec)       
 
 class SSRNTrainGraph(ModelTrainGraph):
     

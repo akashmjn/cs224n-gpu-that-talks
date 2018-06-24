@@ -7,11 +7,12 @@ Experimentation:
     * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
     * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
     * Unsupervised training on mixed language audio    
-    - Transfer learning with unsupervised initialization
+    * Transfer learning with unsupervised initialization
+    - Train SSRN 
 - LJSpeech 
     * Retrain M4 model with masked loss, stop predictions
     * modify attention with position encodings, w w/o guided attention
-    - multi-task learning, joint optimization
+    - multi-task learning, joint optimization (long shot)
 
 General Implementation: 
 
