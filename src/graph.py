@@ -181,7 +181,7 @@ class Text2MelTrainGraph(ModelTrainGraph):
         self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
 
     def _add_additional_summaries(self):
-        if self.attention_mode == 'guided':
+        if self.params.attention_mode == 'guided':
             tf.summary.scalar('train/att_loss',self.att_loss)
     
         with tf.variable_scope('GradSummaries'):
