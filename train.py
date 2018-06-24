@@ -70,7 +70,9 @@ if __name__ == '__main__':
                 if global_step % 50==0:
                     logger.info('Training loss at step {}: {:.4f}, L1: {:.4f}, CE: {:.4f}'.format(
                         global_step,loss_out, L1_out, CE_out))
-                if sess.should_stop(): break # end condition 
+                if sess.should_stop(): 
+                    sess.close()
+                    break # end condition 
     
             print(global_step)
 
