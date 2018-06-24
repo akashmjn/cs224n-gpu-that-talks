@@ -1,22 +1,36 @@
 
+Experimentation:
+
+- General
+    - Generate train / validation evaluation loss numbers 
+- Indic
+    * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
+    * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
+    * Unsupervised training on mixed language audio    
+    - Transfer learning with unsupervised initialization
+- LJSpeech 
+    * Retrain M4 model with masked loss, stop predictions
+    * modify attention with position encodings, w w/o guided attention
+    - multi-task learning, joint optimization
+
 General Implementation: 
 
-- Data pipeline 
+- For Transfer learning experiments    
+    * Implement direct transfer learning 
+    * Implement partial loading of ljspeech model 
+    * Modify training graph for unsupervised training
+    - Modify data loader to use both languages 
+- Data pipeline (Refer: https://github.com/tensorflow/tensor2tensor/blob/master/docs/overview.md)
     * Implement dataset preprocessing
-    * Implement tf.data.Dataset based training / validation pipeline
+    * Implement tf.data.Dataset based pipeline
     * Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
-    - Fix feedable iterator hack for validation data pipeline 
-    - Implement bucketed batches 
+    - Implement training + validation during training 
+    - Bucket data generator by sequence length 
 - Other improvements/bugfixes
     * Implement fix: loss masking for padded batches (text2mel,ssrn)
     * Implement stop prediction
     - Globally use only params.data_dir, remove wav, csv, other path specifications
     - implement dropout, layernorm / other training tricks
-- For Transfer learning experiments    
-    * Implement direct transfer learning 
-    * Implement partial loading of ljspeech model 
-    - Modify training graph for unsupervised training
-    - Modify data loader to use both languages 
 
 - Documentation
     - Document params file parameters
@@ -56,18 +70,3 @@ Core Implementations:
     * implement output feedback
     - Fix inference with stop prediction (crop mag generation)
     - Implement constrained attention at inference
-
-Experimentation:
-
-- General
-    - Generate train / validation evaluation loss numbers 
-- Indic
-    * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
-    * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
-    - Unsupervised training on mixed language audio    
-    - Transfer learning with unsupervised initialization
-
-- LJSpeech 
-    * Retrain M4 model with masked loss, stop predictions
-    * modify attention with position encodings, w w/o guided attention
-    ^ multi-task learning, joint optimization

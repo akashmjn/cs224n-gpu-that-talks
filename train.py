@@ -10,18 +10,18 @@ import pdb
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from tqdm import tqdm
-from src.graph import ModelGraph, UnsupervisedGraph
+from src.graph import ModelGraph, Text2MelTrainGraph, SSRNTrainGraph, UnsupervisedTrainGraph
 from src.utils import Params
-
 
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('params', help="Path to params.json file containing different hyperparameters")
     parser.add_argument('mode', help="Indicate which model to train. Options: train_text2mel, train_ssrn")
     parser.add_argument('--gpu', type=int, default=0,help="GPU to train on if multiple available")
     parser.add_argument('--chkp',help="(For direct transfer learning) path to checkpoint dir to be restored")
+    parser.add_argument('--vars',help="tf.GraphKey used to restore variables from CHKP",default='TextEnc|AudioEnc|AudioDec')
     args = parser.parse_args()
 
     params = Params(args.params)
@@ -30,21 +30,28 @@ if __name__ == '__main__':
     # train_tfrecord_path = str(os.path.join(params.data_dir,'train.tfrecord'))
 
     gs = tf.train.get_or_create_global_step() 
-    # g = ModelGraph(params,args.mode)
-    g = UnsupervisedGraph(params,args.mode)
+
+    if args.mode in 'train_text2mel':
+        g = Text2MelTrainGraph(params)
+    elif args.mode in 'train_ssrn':
+        g = SSRNTrainGraph(params)
+    elif args.mode in 'train_unsupervised':
+        g = UnsupervisedTrainGraph(params)
+    else:
+        raise Exception('Unsupported mode')
     logger = g.logger
 
     ### Hack-y approach to partial loading/transfer learning with MonitoredTrainingSession
-    if hasattr(args,'chkp') and args.chkp:
+    if args.chkp:
         # restore everything except for input embeddings (which will vary based on vocab)
         # NOTE: init_fn of scaffold is only called if params.log_dir does not contain any checkpoints
         with tf.variable_scope('TransferLearnOps'):
-            text2mel_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'TextEnc|AudioEnc|AudioDec')
-            saver1 = tf.train.Saver(var_list=text2mel_vars)       
-        def restore_text2mel_vars(scaffold,sess):
-            saver1.restore(sess, tf.train.latest_checkpoint(args.chkp))
+            restored_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, args.vars)
+            saver = tf.train.Saver(var_list=restored_vars)       
+        def restore_pretrained_vars(scaffold,sess):
+            saver.restore(sess, tf.train.latest_checkpoint(args.chkp))
             print("Text2Mel pretrained variables restored!")       
-        scaffold = tf.train.Scaffold(local_init_op=g.iterator_init_op,init_fn = restore_text2mel_vars)
+        scaffold = tf.train.Scaffold(local_init_op=g.iterator_init_op,init_fn = restore_pretrained_vars)
     else:
         scaffold = tf.train.Scaffold(local_init_op=g.iterator_init_op)   
 
@@ -67,6 +74,8 @@ if __name__ == '__main__':
     
             print(global_step)
 
+    logger.info('Completed {} steps!'.format(global_step))
+
             # training steps 
             # sess.run(g.iterator_init_op,
             #              feed_dict={g.tfrecord_path:train_tfrecord_path}
@@ -78,5 +87,3 @@ if __name__ == '__main__':
             # for _ in tqdm(range(g.num_val_batch), total=g.num_val_batch, ncols=70, leave=False, unit='b'):
             #     # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             #     loss_out, L1_out, CE_out, attn_loss = sess.run([g.loss, g.L1_loss, g.CE_loss, g.attn_loss])
-
-    logger.info('Completed {} steps!'.format(global_step))

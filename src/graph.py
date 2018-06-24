@@ -10,8 +10,213 @@ from .model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, S
 from .utils import set_logger, Params, learning_rate_decay, get_timing_signal_1d
 from .data_load import load_data, get_batch, get_batch_prepro
 
-
 class ModelGraph(object):
+
+    def __init__(self,params):
+        self.params = params
+        self.logger = set_logger(os.path.join(self.params.log_dir,
+                                    self.params.model_name+'.log') ) # sets path for logging
+        self.global_step = tf.train.get_global_step()       
+        self._add_data_input()
+        self._build()
+        self._add_loss_op()
+        self._add_train_op()
+        self._add_inference_op()
+        self._add_tboard_tensor_summaries()
+
+    def _add_data_input(self):
+        pass
+    def _build(self):
+        pass
+    def _add_loss_op(self):
+        pass
+    def _add_train_op(self):
+        pass
+    def _add_inference_op(self):
+        pass
+
+    def _add_input_embeddings(self):
+        """
+        Args:
+            reuse (bool): indicates whether to use variables already defined (from checkpoints)   
+        Returns:
+            L (tf.tensor): tf.float32 tensor obtained after looking up embeddings (shape: batch_size, N, e) 
+        """
+        with tf.variable_scope('InputEmbeddings'):
+            # from Gehring et. al (2017), sizing e the same as d if input embedding is to be added
+            e = self.params.d if self.params.local_encoding else self.params.e
+            vocab_size = len(self.params.vocab)
+            # TODO: Add ability to make padding embedding zero
+            embedding_mat = tf.get_variable(name='char_embeddings',shape=[vocab_size,e],
+                dtype=tf.float32,trainable=True)
+            self.L = tf.nn.embedding_lookup(embedding_mat,self.transcripts)
+
+    def _add_text_encoder(self):
+        self.K, self.V = TextEncBlock(self.L,self.params.d)
+        if self.params.local_encoding:            # as in Gehring et. al (2017) uses input embedding L in value
+            self.V = tf.sqrt(0.5)*(self.L+self.V) # weighted sum with V, L 
+        self.logger.info('Encoded input text to K, V with dim: {}'.format(self.K.shape))       
+
+    def _add_audio_encoder(self):
+        self.Q = AudioEncBlock(self.S,self.params.d)
+        self.logger.info('Encoded input audio to Q with dim: {}'.format(self.Q.shape))       
+
+    def _add_attention(self):
+        if self.params.pos_encoding:             # as in Gehring et. al (2017) adding these to precondition monotonicity
+            K_pos, Q_pos = self._get_pos_encodings()
+            self.K = self.K + K_pos[0,:tf.shape(self.K)[1],:]
+            self.Q = self.Q + Q_pos[0,:tf.shape(self.Q)[1],:]
+        self.A , self.R = AttentionBlock(self.K, self.V, self.Q)
+        self.logger.info('Encoded attention output to R with dim: {}'.format(self.R.shape))       
+
+    def _add_audio_decoder(self):
+        self.RQ = tf.concat([self.R, self.Q],axis=2)
+        self.logger.info('Concatenated RQ with dim: {}'.format(self.RQ.shape))
+        self.Ylogit, self.Yhat, self.YStoplogit = AudioDecBlock(self.RQ,self.params.F)
+        self.logger.info('Decoded Yhat with dim: {}'.format(self.Yhat.shape))       
+
+    def _get_pos_encodings(self):
+        """
+        Args:
+            reuse (bool): reuse of variable scope
+        Returns:
+            K_pos (tf.tensor) (shape: 1, max_N, d)
+            Q_pos (tf.tensor) (shape: 1, max_T, d)
+        """
+        with tf.variable_scope('PositionalEncodings'):
+            K_pos = get_timing_signal_1d(self.params.max_N,self.params.d,self.params.pos_rate)
+            Q_pos = get_timing_signal_1d(self.params.max_T,self.params.d)
+        return K_pos, Q_pos       
+
+    def _add_tboard_tensor_summaries(self):
+        pass
+
+class ModelTrainGraph(ModelGraph):
+
+    def _add_data_input(self):
+        if self.params.prepro: # reading pre-processed data from .tfrecord (recommended) 
+            self.tfrecord_path = tf.constant(os.path.join(self.params.data_dir,'train.tfrecord'))
+            batch, self.iterator_init_op,self.num_train_batch, self.num_val_batch = get_batch_prepro(
+                    self.tfrecord_path,self.params,self.logger
+                ) 
+            self.transcripts, self.Y, self.Z, self.Y_mask = batch['indexes'], batch['mels'], batch['mags'], batch['mels_mask']
+            self.Y_stop_labels = 1 - self.Y_mask[:,:,0] # 0 when data exists, 1 when padded
+        else:
+            self.transcripts, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)       
+
+    def _add_loss_op(self):
+        # compute loss (without guided attention loss for now)
+        with tf.variable_scope('LossOps'):
+            self.L1_loss = tf.reduce_sum(
+                    tf.abs(self.target-self.pred)*self.Y_mask
+                    )/tf.reduce_sum(self.Y_mask) # padded batches are masked
+            assert len(self.L1_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.L1_loss.shape)
+            self.CE_loss = tf.reduce_sum(
+                    tf.nn.sigmoid_cross_entropy_with_logits(labels=self.target,logits=self.logit)*self.Y_mask
+                )/tf.reduce_sum(self.Y_mask)     # padded batches are masked
+            assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
+            self.stop_loss = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y_stop_labels,logits=self.YStoplogit)
+                )                                # stop predictions are not masked 
+            self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss + self.stop_loss
+            self.logger.info('Added masked L1, CE and stop loss ops ...')
+
+            # guided attention loss from Tachibana et. al (2017)
+            if self.params.attention_mode =='guided' and 'ssrn' not in self.mode:
+                # A (shape: batch_size, N, T) - these dimensions are fixed for a single padded batch
+                N, T = tf.cast(tf.shape(self.A)[1],tf.float32), tf.cast(tf.shape(self.A)[2],tf.float32)
+                W = tf.fill(tf.shape(self.A),0.0) # weight matrix to be multiplied with A
+                W = W + tf.expand_dims(tf.range(N),1)/N - tf.expand_dims(tf.range(T),0)/T # using broadcasting for mat + col - row
+                self.W_att = 1.0 - tf.exp(-tf.square(W)/(2*0.2)**2) # using g=0.2 from paper
+                self.att_loss = tf.reduce_mean(tf.multiply(self.A,self.W_att))
+                tf.summary.scalar('train/att_loss',self.att_loss)
+                self.loss = self.loss + self.att_loss
+                self.logger.info('Added guided attention loss over A: {}'.format(self.A))       
+
+    def _add_train_op(self):
+        with tf.variable_scope('optimizer'):
+            self.lr = learning_rate_decay(self.params,self.global_step) 
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr,beta1=self.params.beta1,beta2=self.params.beta2)
+            ## gradient clipping
+            self.gvs = self.optimizer.compute_gradients(self.loss)
+            self.clipped = []
+            for grad, var in self.gvs:
+                try:
+                    grad = tf.clip_by_value(grad, -self.params.grad_clip_value, self.params.grad_clip_value)
+                    self.clipped.append((grad, var))
+                except Exception as e:
+                    print(grad)
+            self.grad_norm = tf.global_norm([g for g,v in self.clipped])
+            tf.summary.scalar('train/lr',self.lr)
+            tf.summary.scalar('train/grad_global_norm',self.grad_norm)
+        self.train_op = self.optimizer.apply_gradients(self.clipped, global_step=self.global_step) # increments gs             
+
+    def _add_tboard_tensor_summaries(self):
+        tf.summary.image(self._tboard_label+'_target', tf.expand_dims(tf.transpose(self.target[:1], [0, 2, 1]), -1))
+        tf.summary.image(self._tboard_label+'_pred', tf.expand_dims(tf.transpose(self.pred[:1], [0, 2, 1]), -1))
+        tf.summary.histogram(self._tboard_label+'_target',self.target)
+        tf.summary.histogram(self._tboard_label+'_logit',self.logit)
+        tf.summary.histogram(self._tboard_label+'_pred',self.pred)
+        tf.summary.scalar('train/L1_loss',self.L1_loss)
+        tf.summary.scalar('train/CE_loss',self.CE_loss)
+        tf.summary.scalar('train/total_loss',self.loss)       
+        tf.summary.merge_all()
+
+class Text2MelTrainGraph(ModelTrainGraph):
+
+    def _build(self):
+        self.logger.info('Building training graph for Text2Mel ...')       
+        self._add_data_input()
+        self._add_input_embeddings()
+        self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
+        self._add_text_encoder()
+        self._add_audio_encoder()
+        self._add_attention()
+        tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
+        self._add_audio_decoder()
+        self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
+
+class SSRNTrainGraph(ModelTrainGraph):
+    
+    def _build(self):
+        self.logger.info('Building training graph for SSRN ...')
+        self._add_data_input()     
+        self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo) # input, labels: true mels, mags
+        self.target, self.pred, self.logit, self._tboard_label = self.Z, self.Zhat, self.Zlogit, 'train/Z'
+
+    def _add_loss_op(self):
+        with tf.variable_scope('LossOps'):
+            self.L1_loss = tf.reduce_mean(tf.abs(self.target-self.pred)) # batches are now samples patches
+            assert len(self.L1_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.L1_loss.shape)
+            self.CE_loss = tf.reduce_mean(
+                    tf.nn.sigmoid_cross_entropy_with_logits(labels=self.target,logits=self.logit)
+                )  # padded batches are masked
+            assert len(self.CE_loss.shape.as_list())==0,'Loss not scalar, shape: {}'.format(self.CE_loss.shape)
+            self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss 
+            self.logger.info('Added L1, CE loss ops ...')
+
+class UnsupervisedTrainGraph(ModelTrainGraph):
+
+    def _build(self):
+        self.logger.info('Building training graph for unsupervised training on audio ...')
+        self._add_data_input()
+        self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # one-prev-shifted target input) 
+        self._add_audio_encoder()
+        self._add_unsupervised_attn_input()
+        self._add_audio_decoder()
+        self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
+
+    def _add_unsupervised_attn_input(self):
+        with tf.variable_scope('UnsupervisedInput'):
+            self.unsupervised_input = tf.get_variable(name='unsupervised_input',shape=[self.params.d],
+                dtype=tf.float32,trainable=True)
+            self.R = tf.zeros_like(self.Q) + self.unsupervised_input
+        self.logger.info('Added trainable R broadcast to dim: {}'.format(self.R.shape))       
+
+
+####### Old code to be removed #######
+
+class OldModelGraph(object):
     """
     Encapsulates all the graph nodes used by the model for training / inference
 
@@ -63,7 +268,7 @@ class ModelGraph(object):
 
         if self.mode in ['train_ssrn','val_ssrn']:
             self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo,reuse=reuse) # input, labels: true mels, mags
-            self.target, self.pred, self.logit, self.sumlabel = self.Z, self.Zhat, self.Zlogit, 'train/Z'
+            self.target, self.pred, self.logit, self._tboard_label = self.Z, self.Zhat, self.Zlogit, 'train/Z'
             self.add_loss_op()
             self.add_train_op()
             tf.summary.image('train/mag_target', tf.expand_dims(tf.transpose(self.Z[:1], [0, 2, 1]), -1))
@@ -229,70 +434,6 @@ class ModelGraph(object):
         self.train_op = self.optimizer.apply_gradients(self.clipped, global_step=self.global_step) # increments gs      
         # self.train_op = self.optimizer.minimize(self.loss)
 
-class UnsupervisedGraph(ModelGraph):
-
-    def __init__(self,params,mode):
-        """
-        Builds out the model graph in different modes depending on inference, or training 
-        different parts of the model. 
-
-        Args:
-            params (utils.Params): Object containing various hyperparams for building model graph
-            mode (str): Either of 'train_text2mel', 'train_ssrn', or 'synthesize'
-        """
-        self.params = params
-        self.mode = mode
-        self.logger = set_logger(os.path.join(self.params.log_dir,
-                                    self.params.model_name+'_'+mode+'.log') ) # sets path for logging
-        self.global_step = tf.train.get_global_step()
-
-        # gets labels, mel spectrograms, full magnitude spectrograms, fnames, and total no of batches
-        self.tfrecord_path = tf.constant(os.path.join(params.data_dir,'train.tfrecord'))
-        batch, self.iterator_init_op,self.num_train_batch, self.num_val_batch = get_batch_prepro(
-                self.tfrecord_path,params,self.logger
-            ) 
-        self.Y, self.Y_mask = batch['mels'], batch['mels_mask']
-        self.Y_stop_labels = 1 - self.Y_mask[:,:,0] # 0 when data exists, 1 when padded
-
-        self.build(reuse=None)                
-        # self.build_text2mel(reuse=None) # TODO: maybe look at combined training?
-        # self.build_ssrn(reuse=None)
-        tf.summary.merge_all()
-
-    def build(self,reuse=None):
-        """
-        Creates graph for either training or inference. During training, one-previous shifted targets 
-        are used as the feedback input S. During inference (synthesis) a variable time-length input 
-        consisting of mel frames generated so far is used as input.  
-        """
-        assert self.mode in ['train_text2mel','val_text2mel','synthesize']
-        # building training graph for Text2Mel
-        self.logger.info('Building training graph for Text2Mel ...')       
-        if self.mode != 'synthesize':
-            self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # one-prev-shifted target input) 
-        else:
-            self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # feedback at inference time 
-        self.add_predict_op(reuse)
-        self.target, self.pred, self.logit, self.sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
-        self.add_loss_op()
-        self.add_train_op()
-    
-    def add_predict_op(self,reuse=None):
-
-        self.Q = AudioEncBlock(self.S,self.params.d)
-        self.logger.info('Encoded Q with dim: {}'.format(self.Q.shape))
-        with tf.variable_scope('UnsupervisedInput',reuse=reuse):
-            self.unsupervised_input = tf.get_variable(name='unsupervised_input',shape=[self.params.d],
-                dtype=tf.float32,trainable=True)
-            self.R = tf.zeros_like(self.Q) + self.unsupervised_input
-        self.logger.info('Added trainable R broadcast to dim: {}'.format(self.R.shape))
-        self.RQ = tf.concat([self.R, self.Q],axis=2)
-        self.logger.info('Concatenated RQ with dim: {}'.format(self.RQ.shape))
-        self.Ylogit, self.Yhat, self.YStoplogit = AudioDecBlock(self.RQ,self.params.F)
-        self.logger.info('Decoded Yhat with dim: {}'.format(self.Yhat.shape))
-    
-        return self.Ylogit, self.Yhat
- 
 ####### test functions (might be slightly deprecated) ########
 
 def test_graph_setup(mode='placeholder'):
@@ -325,7 +466,6 @@ def test_graph_setup(mode='placeholder'):
 
     np.set_printoptions(precision=3)
     logger.info(Y_out)   
-
 
 if __name__ == '__main__':
 
