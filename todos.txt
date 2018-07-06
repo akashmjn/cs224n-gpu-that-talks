@@ -8,7 +8,8 @@ Experimentation:
     * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
     * Unsupervised training on mixed language audio    
     * Transfer learning with unsupervised initialization
-    - Train SSRN 
+    - Transfer with frozen params, lower LR
+    - Train SSRN on Indic dataset 
 - LJSpeech 
     * Retrain M4 model with masked loss, stop predictions
     * modify attention with position encodings, w w/o guided attention
@@ -26,12 +27,13 @@ General Implementation:
     * Implement tf.data.Dataset based pipeline
     * Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
     - Implement training + validation during training 
+    - Fix SSRN patch-wise data generator with tfrecords
     - Bucket data generator by sequence length 
 - Other improvements/bugfixes
     * Implement fix: loss masking for padded batches (text2mel,ssrn)
     * Implement stop prediction
-    - Globally use only params.data_dir, remove wav, csv, other path specifications
     - implement dropout, layernorm / other training tricks
+    - Globally use only params.data_dir, remove wav, csv, other path specifications
 
 - Documentation
     - Document params file parameters

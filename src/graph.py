@@ -139,7 +139,10 @@ class ModelTrainGraph(ModelGraph):
             ## gradient clipping
             self.gvs = self.optimizer.compute_gradients(self.loss)
             self.clipped = []
-            for grad, var in self.gvs:
+            self.logger.info('Adding training op only for variables in scope: {}'.format(self.params.trainable_vars))
+            self.trainable_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,self.params.trainable_vars)
+            self.trainable_gvs = [(g,v) for g,v in self.gvs if v in self.trainable_vars]
+            for grad, var in self.trainable_gvs:
                 try:
                     grad = tf.clip_by_value(grad, -self.params.grad_clip_value, self.params.grad_clip_value)
                     self.clipped.append((grad, var))

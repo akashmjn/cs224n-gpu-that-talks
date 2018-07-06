@@ -21,16 +21,20 @@ if __name__ == '__main__':
     parser.add_argument('mode', help="Indicate which model to train. Options: train_text2mel, train_ssrn")
     parser.add_argument('--gpu', type=int, default=0,help="GPU to train on if multiple available")
     parser.add_argument('--chkp',help="(For direct transfer learning) path to checkpoint dir to be restored")
-    parser.add_argument('--vars',help="tf.GraphKey used to restore variables from CHKP",default='TextEnc|AudioEnc|AudioDec')
+    parser.add_argument('--restore-vars',help="tf.GraphKey used to restore variables from CHKP",default='TextEnc|AudioEnc|AudioDec')
+    parser.add_argument('--train-vars',help="tf.GraphKey used to update variables in training",
+                                        default='InputEmbed|TextEnc|AudioEnc|AudioDec')
     args = parser.parse_args()
 
     params = Params(args.params)
     print('Running a training run with params from: {}'.format(args.params))
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)  # default use single GPU
-    # train_tfrecord_path = str(os.path.join(params.data_dir,'train.tfrecord'))
 
+    # Add trainable variables to params
+    params.dict['trainable_vars'] = args.train_vars
+
+    # Parse mode and setup graph 
     gs = tf.train.get_or_create_global_step() 
-
     if args.mode in 'train_text2mel':
         g = Text2MelTrainGraph(params)
     elif args.mode in 'train_ssrn':
@@ -41,14 +45,14 @@ if __name__ == '__main__':
         raise Exception('Unsupported mode')
     logger = g.logger
 
-    ### partial loading/transfer learning with MonitoredTrainingSession 
+    ### partial loading/transfer learning hack with MonitoredTrainingSession 
     if args.chkp:
         # restore everything except for input embeddings (which will vary based on vocab)
         with tf.variable_scope('TransferLearnOps'):
-            restored_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, args.vars)
+            restored_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, args.restore_vars)
             saver = tf.train.Saver(var_list=restored_vars)       
         def restore_pretrained_vars(scaffold,sess):
-            logger.info("Restoring pretrained variables {} from {}".format(args.vars,args.chkp))
+            logger.info("Restoring pretrained variables {} from {}".format(args.restore_vars,args.chkp))
             saver.restore(sess, tf.train.latest_checkpoint(args.chkp))
             print("Text2Mel pretrained variables restored!")       
         # NOTE: init_fn of scaffold is only called if params.log_dir does not contain any checkpoints
