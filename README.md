@@ -1,4 +1,4 @@
-## Attention, I'm Trying to Speak: End-to-end speech synthesis (CS224n '18 project)
+## Attention, I'm Trying to Speak: End-to-end speech synthesis (CS224n '18)
 
 Implementation of a convolutional seq2seq-based text-to-speech model based on [Tachibana et. al. (2017)](https://arxiv.org/abs/1710.08969). 
 Given a sequence of characters, the model predicts a sequence of spectrogram frames in two stages (Text2Mel and SSRN). 
