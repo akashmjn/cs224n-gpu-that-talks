@@ -63,9 +63,11 @@ def process_csv_file(csv_path,params,mode='IndicTTSHindi'):
     print('Processing csv file with mode: {}'.format(mode))
     for line in lines:
         if mode=='LJSpeech':
+            assert('lj' in csv_path.lower())
             fname, _, text = line.strip().split(params.transcript_csv_sep)[:3]
             text = text_normalize(text,params) + params.end_token  # E: EOS
         elif mode=='IndicTTSHindi':
+            assert('indic' in csv_path.lower())
             fname, text = line.strip().split(params.transcript_csv_sep)[:2]
             text = text_normalize(text,params,False) + params.end_token  # E: EOS           
         fpath = os.path.join(params.data_dir,'wavs',fname + ".wav")
