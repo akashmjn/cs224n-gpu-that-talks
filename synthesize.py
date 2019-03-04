@@ -4,13 +4,15 @@ import argparse
 import logging
 import os,sys
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import pdb
 
 import tensorflow as tf
-from src.graph import ModelGraph
+from src.graph import SynthesizeGraph 
 from src.utils import Params
 from src.data_load import load_vocab, text_normalize, load_data
 from src.dsp_utils import spectrogram2wav, save_wav
@@ -65,10 +67,10 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
     params.dict['batch_size'] = n_batch
     output_mel = np.zeros((n_batch,params.max_T,params.F)) 
     output_mag = np.zeros((n_batch,params.max_T,params.Fo))
-    last_attended = np.zeros((n_batch,))
+    #last_attended = np.zeros((n_batch,))
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # use single GPUs available
-    g = ModelGraph(params,'synthesize')      
+    g = SynthesizeGraph(params)      
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -88,15 +90,24 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
         stop_flags = np.array([False]*n_batch)
         stop_idxs = np.zeros((n_batch,),dtype=int)
 
+        # Steps for synthesis: 
+        ## Step1: Pre-compute text encoding (K, V) = TextEncBlock(character sequence) 
+        K, V = sess.run([g.K,g.V],{g.transcripts:input_arr})
+
         # Generate all the mel frames
         # TODO: Fix constrained monotonic attention 
+        ## Step2: Iterate over t, qt = AudioEncBlock(S:t), rt = Attention(qt,KV), St = AudioDecBlock(qt,rt)
         for i in range(1,params.max_T):
             if all(stop_flags): break # end of audio for all inputs in batch
 
             print('Mel frame {}/{}'.format(i+1,params.max_T),end='\r')
-            prev_slice = output_mel[:,:i,:]
+            # optimization: fixed-width window to encode previously generated frames 
+            slice_window = max(0,i-100) # TODO: fix hardcoded value
+            prev_slice = output_mel[:,slice_window:i,:]
 
-            model_preds, stop_preds = sess.run([g.Yhat,g.YStoplogit],{g.S:prev_slice,g.transcripts:input_arr}) 
+            model_preds, stop_preds = sess.run([g.Yt,g.YStopt],{g.K_pre:K,g.V_pre:V,g.S:prev_slice}) 
+            output_mel[:,i,:] = model_preds[:,-1,:]
+
             # threshold 0.5 for stop sigmoid output
             if len(stop_preds.shape)>1: stop_preds = stop_preds[:,-1] # stop_preds is dim: n_batch, T
             stop_preds = stop_preds > 0.0 
@@ -110,13 +121,12 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
             #     {g.S:prev_slice,g.transcripts:input_arr,g.last_attended:last_attended})
             # last_attended += np.argmax(attn_out[:,-1,:],axis=1) # slicing out the last time frame, and moving attention window forward
             # last_attended = np.clip(last_attended,a_min=0,a_max=text_lengths-params.attn_window_size)
-
-            output_mel[:,i,:] = model_preds[:,-1,:]
     
+        ## Step3: Process complete utterance and invert Z = SSRN(Y:T)
         # truncate mel predictions using stop_idxs 
         for i,stop_idx in enumerate(stop_idxs): output_mel[i,stop_idx:,:] = 0
         # Convert to magnitude spectrograms
-        output_mag, attn_out = sess.run([g.Zhat,g.A],{g.S:output_mel,g.transcripts:input_arr})       
+        output_mag, attn_out = sess.run([g.Zhat,g.A],{g.transcripts:input_arr,g.S:output_mel})       
         # output_mag, attn_out = sess.run([g.Zhat,g.A],
         #         {g.S:output_mel,g.transcripts:input_arr,g.last_attended:last_attended})
         print("Magnitude spectrograms generated, inverting ..")
