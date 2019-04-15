@@ -229,7 +229,7 @@ def AudioEncBlock(S,d,scope="AudioEncBlock"):
     return Q
 
 
-def AudioDecBlock(RQ,F,scope='AudioDecBlock'):
+def AudioDecBlock(RQ,d,F,scope='AudioDecBlock',reuse=None):
     """
     Implements the AudioDecBlock from Tachibana et. al (2017)
     This block decodes concatenated internal encodings - R (Txd) (attention output from TextEnc)
@@ -239,16 +239,17 @@ def AudioDecBlock(RQ,F,scope='AudioDecBlock'):
 
     Args:
         RQ (tf.tensor): Concatenated tensor of R,Q (shape: batch_size, T, 2d)
+        d (int): Dimension of encodings before concatenation
         F (int): Number of mel frames 
         scope (str): variable scope
+        reuse (bool): Use to share weights while evaluating model or inference
 
     Returns:
         Ylogit (tf.tensor): Output tensor of logit (before sigmoid) (shape: batch_size, T, F)
         Yhat (tf.tensor): Output tensor of mel frames (shape: batch_size, T, F)
     """   
-    d = RQ.shape.as_list()[2]//2
 
-    with tf.variable_scope(scope):
+    with tf.variable_scope(scope,reuse=reuse):
         conv_params = {"filters":d,"kernel_size":1,"dilation_rate":1,"padding":'causal'} 
         with tf.variable_scope('C_layer1'): # conv layer 
             L1 = conv1d(RQ,**conv_params)
