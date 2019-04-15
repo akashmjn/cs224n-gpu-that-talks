@@ -50,7 +50,7 @@ class ModelGraph(object):
             embedding_mat = tf.get_variable(name='char_embeddings',shape=[vocab_size,e],
                 dtype=tf.float32,trainable=True)
             L = tf.nn.embedding_lookup(embedding_mat,transcripts)
-            return L
+        return L
 
     def _add_text_encoder(self,L):
         K, V = TextEncBlock(L,self.params.d)
@@ -70,8 +70,8 @@ class ModelGraph(object):
             K = K + K_pos[0,:tf.shape(K)[1],:]
             Q = Q + Q_pos[0,:tf.shape(Q)[1],:]
         A, R = AttentionBlock(K, V, Q)
-        self.logger.info('Encoded attention output to R with dim: {}'.format(R.shape))       
-        return A, R
+        self.logger.info('Encoded context vector R with dim: {}'.format(R.shape))       
+        return K, V, Q, A, R
 
     def _add_audio_decoder(self,R,Q,reuse=None):
         RQ = tf.concat([R, Q],axis=2)
@@ -183,7 +183,7 @@ class Text2MelTrainGraph(ModelTrainGraph):
         self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
         self.K, self.V = self._add_text_encoder(self.L)
         self.Q = self._add_audio_encoder(self.S)
-        self.A, self.R = self._add_attention(self.K,self.V,self.Q)
+        self.K, self.V, self.Q, self.A, self.R = self._add_attention(self.K,self.V,self.Q)
         tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
         self.Ylogit, self.Yhat, self.YStoplogit = self._add_audio_decoder(self.R,self.Q)
         self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
@@ -254,22 +254,32 @@ class SynthesizeGraph(ModelGraph):
     def _add_data_input(self):
         self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
         self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
-        self.K_pre = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding 
-        self.V_pre = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding 
+        self.K_inp = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding 
+        self.V_inp = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding
+        self.t = tf.placeholder(dtype=tf.int32,shape=()) # current timestep (required for pos encodings)
+
+    def _add_attention_t(self,K,V,Qt):
+        if self.params.pos_encoding:             # as in Gehring et. al (2017) adding these to precondition monotonicity
+            K_pos, Q_pos = self._get_pos_encodings()
+            K = K + K_pos[0,:tf.shape(K)[1],:]
+            Qt = Qt + Q_pos[0,self.t,:]
+        A, R = AttentionBlock(K, V, Qt)
+        self.logger.info('Encoded context vector Rt with dim: {}'.format(R.shape))       
+        return K, V, Qt, A, R
     
     def _build(self):
         self.logger.info("Building inference graph ...")
         # Add embeddings lookup 
         self.L = self._add_input_embeddings(self.transcripts)
-        self.K, self.V = self._add_text_encoder(self.L)
-        # Iteration t: qt = AudioEncBlock(S:t)[t], rt = Attention(qt,KV), Yt = AudioDecBlock(qt,rt)
+        self.K_pre, self.V_pre = self._add_text_encoder(self.L)
         self.Q = self._add_audio_encoder(self.S)
-        self.Qt = self.Q[:,-1:,:] # qt = AudioEncBlock(S:t)[t], need only last context vector
-        self.At, self.Rt = self._add_attention(self.K_pre,self.V_pre,self.Qt)
-        _, self.Yt, self.YStopt = self._add_audio_decoder(self.Rt,self.Qt)
+        # # Iteration t: qt = AudioEncBlock(S:t)[t], rt = Attention(qt,KV), Yt = AudioDecBlock(qt,rt)
+        # self.Qt = self.Q[:,-1:,:] # qt = AudioEncBlock(S:t)[t], need only last context vector
+        # self.At, self.Rt = self._add_attention_t(self.K_pre,self.V_pre,self.Qt)
+        # _, self.Yt, self.YStopt = self._add_audio_decoder(self.Rt,self.Qt)
         # Full utterance computation for SSRN
-        self.A, self.R = self._add_attention(self.K,self.V,self.Q)
-        self.Ylogit, self.Y, self.YStoplogit = self._add_audio_decoder(self.R,self.Q,reuse=True)
+        self.K, self.V, self.Q, self.A, self.R = self._add_attention(self.K_inp,self.V_inp,self.Q)
+        self.Ylogit, self.Y, self.YStoplogit = self._add_audio_decoder(self.R,self.Q,reuse=False)
         self.Zlogit, self.Zhat = SSRNBlock(self.Y,self.params.c,self.params.Fo) # input, labels: true mels, mags
         self.logger.info('Built SSRN with output dim: {}'.format(self.Zhat.shape))       
 
@@ -362,8 +372,8 @@ class OldModelGraph(object):
             self.logger.info('Initialized position encodings, shapes: {}, {}'.format(self.K_pos.shape,self.Q_pos.shape))
 
         self.add_predict_op(reuse)
-        self.target, self.pred, self.logit, self.sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
-        tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
+        # self.target, self.pred, self.logit, self.sumlabel = self.Y, self.Yhat, self.Ylogit, 'train/Y'
+        # tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
         if self.mode in ['train_text2mel','val_text2mel']:
             self.add_loss_op()
             self.add_train_op()
@@ -424,7 +434,7 @@ class OldModelGraph(object):
         self.logger.info('Encoded R with dim: {}'.format(self.R.shape))
         self.RQ = tf.concat([self.R, self.Q],axis=2)
         self.logger.info('Concatenated RQ with dim: {}'.format(self.RQ.shape))
-        self.Ylogit, self.Yhat, self.YStoplogit = AudioDecBlock(self.RQ,self.params.F)
+        self.Ylogit, self.Yhat, self.YStoplogit = AudioDecBlock(self.RQ,self.params.d,self.params.F)
         self.logger.info('Decoded Yhat with dim: {}'.format(self.Yhat.shape))
     
         return self.Ylogit, self.Yhat

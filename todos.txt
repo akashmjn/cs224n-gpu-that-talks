@@ -1,10 +1,15 @@
 
 Experimentation:
 
+Debugging checkpoints: 
+    - v0 LJ model: no masking, no stop predictions (unmasked)
+    - v0.5 LJ model: masking, no stop predictions 
+    - v1 LJ model: masking + stop predictions
+
 - General
     - Generate train / validation evaluation loss numbers 
 - Indic
-    * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction
+    * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction (v1)
     * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
     * Unsupervised training on mixed language audio    
     * Transfer learning with unsupervised initialization
