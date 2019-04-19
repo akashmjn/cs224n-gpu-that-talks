@@ -35,7 +35,7 @@ synthesize.py
 
 ### Script files
 
-Run each file with `python script_file.py -h` to see usage details. 
+Run each file with `python <script_file>.py -h` to see usage details. 
 
 ```
 python train.py <PATH_PARAMS.JSON> <MODE>
