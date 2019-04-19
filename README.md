@@ -5,9 +5,11 @@ Given a sequence of characters, the model predicts a sequence of spectrogram fra
 
 As discussed in the report, we can get fairly decent audio quality with Text2Mel trained for 60k steps, SSRN for 100k steps. This corresponds to about (10+20) hours of training on a single Tesla M60 GPU on the [LJ Speech Dataset](https://keithito.com/LJ-Speech-Dataset/).
 
-**Poster**: [[link]](https://akashmjn.github.io/cs224n/cs224n-final-poster.pdf) 
-**Final Report**: [[link]](https://akashmjn.github.io/cs224n/cs224n-final-project-report.pdf) <br/>
-**Test Samples**: [[base-model-M4]](https://soundcloud.com/akashmjn/sets/m4-tuned-model) [[unsupervised-decoder-M1]](https://soundcloud.com/akashmjn/sets/m1-audio-language-model) <br/> 
+**Pretrained Model**: [[download]](https://sharedstorage7190.blob.core.windows.net/cs224n-data/pretrained_v1.0.1.tar.gz)
+**Samples**: [[base-model-M4]](https://soundcloud.com/akashmjn/sets/m4-tuned-model) [[unsupervised-decoder-M1]](https://soundcloud.com/akashmjn/sets/m1-audio-language-model) <br/> 
+
+For more details see:
+[**Poster**](https://akashmjn.github.io/cs224n/cs224n-final-poster.pdf) [**Paper**](https://akashmjn.github.io/cs224n/cs224n-final-project-report.pdf) <br/>
 
 ![Model Schematic (left), Character Embeddings (right)](https://raw.githubusercontent.com/akashmjn/cs224n-gpu-that-talks/master/reports/readme-banner.png)
 
