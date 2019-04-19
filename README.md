@@ -3,7 +3,7 @@
 Implementation of a convolutional seq2seq-based text-to-speech model based on [Tachibana et. al. (2017)](https://arxiv.org/abs/1710.08969). 
 Given a sequence of characters, the model predicts a sequence of spectrogram frames in two stages (Text2Mel and SSRN). 
 
-As discussed in the report, we can get fairly decent audio quality with Text2Mel trained for 60k steps, SSRN for 100k steps. This corresponds to about (10+20) hours of training on a single Tesla M60 GPU on the [LJ Speech Dataset](https://keithito.com/LJ-Speech-Dataset/).
+As discussed in the report, we can get fairly decent audio quality with Text2Mel trained for 60k steps, SSRN for 100k steps. This corresponds to about (6+12) hours of training on a single Tesla K80 GPU on the [LJ Speech Dataset](https://keithito.com/LJ-Speech-Dataset/).
 
 **Pretrained Model**: [[download]](https://sharedstorage7190.blob.core.windows.net/cs224n-data/pretrained_v1.0.1.tar.gz)
 **Samples**: [[base-model-M4]](https://soundcloud.com/akashmjn/sets/m4-tuned-model) [[unsupervised-decoder-M1]](https://soundcloud.com/akashmjn/sets/m1-audio-language-model) <br/> 
