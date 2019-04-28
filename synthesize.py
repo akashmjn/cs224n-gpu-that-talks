@@ -14,7 +14,7 @@ import pdb
 import tensorflow as tf
 from src.graph import SynthesizeGraph, OldModelGraph
 from src.utils import Params
-from src.data_load import load_vocab, text_normalize, load_data
+from src.data_load import load_tokens_from_text 
 from src.dsp_utils import spectrogram2wav, save_wav
 
 def invert_mag(inp_triple):
@@ -84,9 +84,9 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
     # Load text as int arrays
     if lines is None: # Toggle whether read in a file or text passed via function call
         # text inputs 
-        input_arr = load_data(params,'synthesize')
+        input_arr, text_lengths = load_tokens_from_text(params)
     else:
-        input_arr = load_data(params,'demo',lines)
+        input_arr, text_lengths = load_tokens_from_text(params,lines)
     n_batch = input_arr.shape[0]
     params.dict['batch_size'] = n_batch
     # Create empty arrays 

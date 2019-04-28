@@ -38,19 +38,28 @@ def process_to_npy(params,input_path,csv_path,output_path):
     #     pool.close()
     #     pool.join()   
 
+# The following functions can be used to convert a value to a type compatible
+# with tf.Example.
+
 def _bytes_feature(value):
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+  """Returns a bytes_list from a string / byte."""
+  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+def _float_feature(value):
+  """Returns a float_list from a float / double."""
+  return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
 def _int64_feature(value):
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+  """Returns an int64_list from a bool / enum / int / uint."""
+  return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 def _int64_list_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))   
 
-def process_to_tfrecord(params,input_path,csv_path,output_path):
+def process_to_tfrecord(params,input_path,csv_path,output_path): #TODO:SP
     # TODO: Parallelize / multiprocess this
 
-    fpaths, text_lengths, indexes = process_csv_file(csv_path,params,mode='IndicTTSHindi')
+    fpaths, text_lengths, transcriptions = process_csv_file(csv_path,params)
     # fpaths = [os.path.join(input_path,f) for f in fpaths]
 
     if 'train' in csv_path:
@@ -65,11 +74,12 @@ def process_to_tfrecord(params,input_path,csv_path,output_path):
     for i,fpath in enumerate(fpaths):
 
         fname, mel, mag = load_spectrograms(fpath,params,'train_text2mel')
-        text_indexes = indexes[i]
+        text = transcriptions[i]
+        print(text)
 
         feature = {
             'fname': _bytes_feature(fname.encode()),
-            'indexes': _bytes_feature(text_indexes),
+            'transcription': _bytes_feature(text.encode()),
             'mel': _bytes_feature(mel.tostring()),
             'mag': _bytes_feature(mag.tostring()),
             'input-len': _int64_feature(text_lengths[i]),
@@ -102,6 +112,3 @@ if __name__ == "__main__":
         process_to_npy(params,args.input_path,args.csv_path,args.output_path)
     elif args.mode=='tfrecord':
         process_to_tfrecord(params,args.input_path,args.csv_path,args.output_path)
-
-
-

@@ -1,13 +1,35 @@
 
 Experimentation:
 
-Debugging checkpoints: 
-    - v0 LJ model: no masking, no stop predictions (unmasked)
-    - v0.5 LJ model: masking, no stop predictions 
-    - v1 LJ model: masking + stop predictions
+Models: 
+    * v0 LJ model: no masking, no stop predictions (unmasked)
+    * v0.5 LJ model: masking, no stop predictions 
+    * v1 LJ model: masking + stop predictions 
+    - v2 LJ model: above + SentencePiece vocab 
 
 - General
+    * Modify data_load with SentencePiece-based tokenization 
+      ref: https://github.com/google/sentencepiece/blob/master/python/sentencepiece_python_module_example.ipynb
+    - Transformer encoder ? 
     - Generate train / validation evaluation loss numbers 
+
+- Subword units
+    * Create LJ SentencePiece vocab
+          spm.SentencePieceTrainer.Train('--input=text_unnormalized.txt --model_prefix=spm250 --vocab_size=250 
+                                --user_defined_symbols=<pad>,<s>,</s> --pad_id=0 --unk_id=1 --bos_id=2 --eos_id=3')
+        * spm.SentencePieceTrainer.Train('--input=text_unnormalized.txt --model_prefix=spm250 --vocab_size=250 
+                                --pad_id=0 --unk_id=1 --bos_id=2 --eos_id=3')
+    * Subword regularization during training
+        * Use tf ops to run spm in tf graph https://colab.research.google.com/drive/1rQ0tgXmHv02sMO6VdTO0yYaTvc1Yv1yP
+    - Quick + dirty: train on LJ text, vocab 250
+        * preprocess.py: process_csv_file, process_to_tfrecord 
+        * parse_tfrecord, get_batch_prepro, synthesize.py:load_data 
+        - complete training run and evaluate
+    - FastText embedding initialization 
+    - ^ same thing on Indic hindi 
+        - characters have modifiers/matras (longer text)
+        - cross-word units (can't use FastText anymore)
+
 - Indic
     * Rerun baseline training from scratch with tf.data pipeline, masked loss, stop prediction (v1)
     * Directly fine-tune pretrained model from LJSpeech (hyperparam search)
@@ -16,6 +38,7 @@ Debugging checkpoints:
     * Transfer with frozen params, lower LR
     - Transfer unsupervised from indic to lj data 
     - Train SSRN on Indic dataset 
+
 - LJSpeech 
     * Retrain M4 model with masked loss, stop predictions
     * modify attention with position encodings, w w/o guided attention
@@ -32,7 +55,7 @@ General Implementation:
     * Implement dataset preprocessing
     * Implement tf.data.Dataset based pipeline
     * Fix deprecated WARNING: switch to tf.train.MonitoredTrainingSession
-!   - Bucket data generator by sequence length 
+    * Bucket data generator by sequence length 
 !   - Implement training + validation during training 
     - Fix SSRN patch-wise data generator with tfrecords
 - Other improvements/bugfixes
@@ -77,5 +100,5 @@ Core Implementations:
 * Inference/Synthesis graph 
     * implement restoring of variables 
     * implement output feedback
-!   - Fix inference with stop prediction (crop mag generation)
+    * Fix inference with stop prediction (crop based on stop_pred)
     - Implement constrained attention at inference

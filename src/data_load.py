@@ -3,22 +3,162 @@
 """
 Functions for data I/O 
 
-Code referenced from: https://www.github.com/kyubyong/dc_tts
-Author: kyubyong park. kbpark.linguist@gmail.com. 
+Some functions referenced from: https://www.github.com/kyubyong/dc_tts 
+Author: Akash Mahajan: akashmjn@alumni.stanford.edu 
 """
 
 from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
+import sentencepiece as spm
+import tf_sentencepiece as tfs
 import codecs, re, os, unicodedata
 from .dsp_utils import *
 
-import pdb
+
+def tokenize_tf(transcription,model_proto,add_bos_eos=True,nbest_size=64,alpha=0.1):
+    # By default adds <sos> and <eos> tokens
+    tokens, seq_len = tfs.encode(transcription,model_proto=model_proto,
+                            nbest_size=nbest_size,alpha=alpha,
+                            add_eos=add_bos_eos,add_bos=add_bos_eos)
+    return tokens, seq_len
+
+def tokenize():
+    #TODO: Implement with tf_sentencepiece https://colab.research.google.com/drive/1rQ0tgXmHv02sMO6VdTO0yYaTvc1Yv1yP
+    pass
+
+def process_csv_file(csv_path,params): #TODO:SP
+    # Process text file containing file,labels
+    # Returns file_paths, text_lengths, indexes (np.array of ints)
+
+    fpaths, text_lengths, transcriptions = [], [], []
+    lines = codecs.open(csv_path, 'r', 'utf-8').readlines()
+
+    print('Processing csv file..')
+    for line in lines:
+        fname, text = line.strip().split(params.transcript_csv_sep)[:2]
+        fpath = os.path.join(params.data_dir,'wavs',fname + ".wav")
+        fpaths.append(fpath)
+        text_lengths.append(len(text))
+        transcriptions.append(text)
+    return fpaths, text_lengths, transcriptions   
+
+def load_tokens_from_text(params,lines=None):
+    sp = spm.SentencePieceProcessor()
+    sp.load(params.spm_model)
+    if lines is None:
+        lines = codecs.open(params.test_data, 'r', 'utf-8').read().splitlines()[1:]
+        lines = list(map(lambda x: x.split('. ',1)[-1],lines))
+    
+    print("Loading test sentences: {}".format(lines))
+    # Encode each line, add control tokens
+    tokens_list = []
+    for line in lines:
+        tokens_list.append([sp.bos_id(),*sp.encode_as_ids(line),sp.eos_id()])
+    # Pack into numpy array
+    lengths = [len(t) for t in tokens_list]
+    tokens = np.zeros((len(tokens_list),max(lengths)),np.int32)
+    for i,t in enumerate(tokens_list): tokens[i,:lengths[i]] = t
+    return tokens, lengths
+
+
+class TFRecordDataloader(object):
+    def __init__(self,params,tfrecord_path,logger):
+        self.params = params
+        self.tfrecord_path = tfrecord_path
+        self.logger = logger
+        # load sentencepiece model
+        self.spm_proto = tf.gfile.GFile(params.spm_model, 'rb').read()
+        self.spm_model = spm.SentencePieceProcessor()
+        self.spm_model.Load(params.spm_model)
+        self.vocab_size = self.spm_model.GetPieceSize()
+        # find total number of batches
+        self.num_batch_train = sum(1 for line in open(params.transcript_csv_path_train))//params.batch_size
+        self.num_batch_val = sum(1 for line in open(params.transcript_csv_path_val))//params.batch_size
+
+        #TODO: Figure out curriculum learning implementation
+        # one way: dataset = dataset.filter(lambda elem: tf.shape(elem)[0] < max_length)
+        self.dataset = tf.data.TFRecordDataset([self.tfrecord_path])\
+                    .map(self.parse_tfrecord,self.params.num_threads)\
+                    .apply(self._get_batching_func())\
+                    .shuffle(self.num_batch_train//2)\
+                    .prefetch(1) # pads with 0s: works for mels, mags, and indexes since vocab[0] is P
+
+        self.iterator = self.dataset.make_initializable_iterator()
+        self.iterator_init_op = self.iterator.initializer
+        self.logger.info('Created dataset and iterators..')
+    
+    def _get_batching_func(self):
+        """
+        Makes params.num_buckets uniformly upto params.max_T length
+        batch_sizes adjusted with ref to middle bucket to keep no. of frames same 
+        """
+        padded_shapes = (
+                tf.TensorShape([None]),
+                tf.TensorShape([None,self.params.F]),
+                tf.TensorShape([None,self.params.Fo]),
+                tf.TensorShape([None,self.params.F])
+            )
+        bin_width = round(self.params.max_T//self.params.num_buckets)
+        bucket_sizes = [ (i+1)*bin_width for i in range(self.params.num_buckets) ] 
+        mid_bucket_size = bucket_sizes[len(bucket_sizes)//2]
+        batch_sizes = [ round(mid_bucket_size/s*self.params.batch_size) for s in [*bucket_sizes,bucket_sizes[-1]] ]
+        bucketing_func = tf.data.experimental.bucket_by_sequence_length( # Use no. of mel frames to bucket
+            lambda t,ml,mg,mlm: tf.shape(ml)[0],bucket_sizes,batch_sizes,padded_shapes=padded_shapes
+        )
+        return bucketing_func
+
+    def parse_tfrecord(self,serialized_inp):
+        # TODO: add support for randomly sampling mag patches for SSRN
+
+        feature_struct = {
+            'fname': tf.FixedLenFeature([],tf.string),
+            'transcription': tf.FixedLenFeature([],tf.string),
+            'mel': tf.FixedLenFeature([],tf.string),
+            'mag': tf.FixedLenFeature([],tf.string),
+            'input-len': tf.FixedLenFeature([],tf.int64),
+            'mel-shape': tf.FixedLenFeature([2],tf.int64),
+            'mag-shape': tf.FixedLenFeature([2],tf.int64)
+        }    
+
+        features = tf.parse_single_example(serialized_inp,features=feature_struct) 
+
+        transcription = tf.reshape(features['transcription'],[1,])  # Shape: (1,) - rank 1 required by sentencepiece
+        tokens, seq_len = tokenize_tf(transcription,self.spm_proto,add_bos_eos=True,
+                                        nbest_size=self.params.spm_nbest,alpha=self.params.spm_alpha) # Shape: (1,N)
+        tokens = tf.squeeze(tokens)                                 #  Shape: (N,)
+        mel = tf.reshape(tf.decode_raw(features['mel'],tf.float32),features['mel-shape'])
+        mag = tf.reshape(tf.decode_raw(features['mag'],tf.float32),features['mag-shape'])
+        mel_mask_shape = tf.cast(features['mel-shape'],tf.int32)
+        # pad some end silence to get model to learn to stop    
+        # mel = tf.pad(mel,[[0,3],[0,0]]) # TODO: Take this from params
+        # mel_mask_shape = mel_mask_shape + tf.constant([3,0],tf.int32) 
+        mel_mask = tf.ones(mel_mask_shape,tf.float32)
+
+        return (tokens,mel,mag,mel_mask) 
+
+    def get_batch(self):
+
+        tokens, mels, mags, mel_mask = self.iterator.get_next()
+        tokens.set_shape((None,None))
+        mels.set_shape((None,None,self.params.F))
+        mags.set_shape((None,None,self.params.Fo))
+        mel_mask.set_shape((None,None,self.params.F))
+        batch = {'tokens':tokens,'mels':mels,'mags':mags,'mels_mask':mel_mask}
+        self.logger.info('Getting batch of tensors of shape: {} {} {}, mask:{}'.format(
+                tokens.shape, mels.shape, mags.shape, mel_mask.shape
+            ))
+
+        return batch 
+
+
+## Older functions referenced from Kyubyong Park repo (deprecated) ##
 
 def load_vocab(params):
     """
     Returns two dicts for lookup from char2idx and idx2char using params.vocab
+    ref: https://www.github.com/kyubyong/dc_tts 
 
     Args:
         params (utils.Params): Object containing various hyperparams
@@ -30,9 +170,10 @@ def load_vocab(params):
     idx2char = {idx: char for idx, char in enumerate(params.vocab)}
     return char2idx, idx2char
 
-def text_normalize(text,params,remove_accents=True,ensure_fullstop=True):
+def text_normalize(text,params,remove_accents=False,ensure_fullstop=True):
     """
     Normalizes an input string based on params.vocab 
+    ref: https://www.github.com/kyubyong/dc_tts 
     
     Args:
         text (str): Input text 
@@ -51,35 +192,9 @@ def text_normalize(text,params,remove_accents=True,ensure_fullstop=True):
     text = re.sub("[ ]+", " ", text)
     return text
 
-def process_csv_file(csv_path,params,mode='IndicTTSHindi'):
-    # Process text file containing file,labels
-    # Returns file_paths, text_lengths, indexes (np.array of ints)
-
-    # Load vocabulary
-    char2idx, idx2char = load_vocab(params)   
-    fpaths, text_lengths, indexes = [], [], []
-    lines = codecs.open(csv_path, 'r', 'utf-8').readlines()
-
-    print('Processing csv file with mode: {}'.format(mode))
-    for line in lines:
-        if mode=='LJSpeech':
-            assert('lj' in csv_path.lower())
-            fname, _, text = line.strip().split(params.transcript_csv_sep)[:3]
-            text = text_normalize(text,params) + params.end_token  # E: EOS
-        elif mode=='IndicTTSHindi':
-            assert('indic' in csv_path.lower())
-            fname, text = line.strip().split(params.transcript_csv_sep)[:2]
-            text = text_normalize(text,params,False) + params.end_token  # E: EOS           
-        fpath = os.path.join(params.data_dir,'wavs',fname + ".wav")
-        fpaths.append(fpath)
-        text = [char2idx[char] for char in text]
-        text_lengths.append(len(text))
-        indexes.append(np.array(text, np.int32).tostring())
-    return fpaths, text_lengths, indexes   
-
-
-def load_data(params,mode="train",lines=None):
+def load_data(params,mode="train",lines=None): #TODO:SP
     '''Loads data
+    ref: https://www.github.com/kyubyong/dc_tts 
       Args:
           mode: "train" or "synthesize".
     '''
@@ -87,7 +202,7 @@ def load_data(params,mode="train",lines=None):
     if 'train' in mode or 'val' in mode:
         # toggle train/val datasets
         transcript_csv_path = params.transcript_csv_path_train if 'train' in mode else params.transcript_csv_path_val
-        return process_csv_file(transcript_csv_path,params,'IndicTTSHindi')
+        return process_csv_file(transcript_csv_path,params)
 
     elif mode=='synthesize' or lines is not None: # inference mode on unseen test text
         # Load vocabulary
@@ -108,36 +223,11 @@ def load_data(params,mode="train",lines=None):
             indexes[i, :len(sent)] = [char2idx[char] for char in sent]
         return indexes
 
-def parse_tfrecord(serialized_inp):
-    # TODO: add support for randomly sampling mag patches for SSRN
-
-    reader = tf.TFRecordReader()
-
-    feature_struct = {
-        'fname': tf.FixedLenFeature([],tf.string),
-        'indexes': tf.FixedLenFeature([],tf.string),
-        'mel': tf.FixedLenFeature([],tf.string),
-        'mag': tf.FixedLenFeature([],tf.string),
-        'input-len': tf.FixedLenFeature([],tf.int64),
-        'mel-shape': tf.FixedLenFeature([2],tf.int64),
-        'mag-shape': tf.FixedLenFeature([2],tf.int64)
-    }    
-
-    features = tf.parse_single_example(serialized_inp,features=feature_struct) 
-
-    indexes = tf.decode_raw(features['indexes'],tf.int32)
-    mel = tf.reshape(tf.decode_raw(features['mel'],tf.float32),features['mel-shape'])
-    mag = tf.reshape(tf.decode_raw(features['mag'],tf.float32),features['mag-shape'])
-    # pad some end silence to get model to learn to stop    
-    mel = tf.pad(mel,[[0,3],[0,0]]) 
-    mel_mask_shape = tf.cast(features['mel-shape'],tf.int32)
-    mel_mask_shape = mel_mask_shape + tf.constant([3,0],tf.int32) 
-    mel_mask = tf.ones(mel_mask_shape,tf.float32)
-
-    return (indexes,mel,mag,mel_mask) 
-
 def get_batch(params,mode,logger):
-    """Loads training data and put them in queues"""
+    """
+    Loads training data and put them in queues
+    ref: https://www.github.com/kyubyong/dc_tts 
+    """
     
     with tf.device('/cpu:0'):
         # Load data
@@ -190,37 +280,4 @@ def get_batch(params,mode,logger):
 
     return indexes, mels, mags, fnames, num_batch
 
-def get_batch_prepro(tfrecord_path,params,logger):
-
-    # find total number of batches
-    num_batch_train = sum(1 for line in open(params.transcript_csv_path_train))//params.batch_size
-    num_batch_val = sum(1 for line in open(params.transcript_csv_path_val))//params.batch_size
-
-    padded_shapes = (
-            tf.TensorShape([None]),
-            tf.TensorShape([None,params.F]),
-            tf.TensorShape([None,params.Fo]),
-            tf.TensorShape([None,params.F])
-        )
-
-    dataset = tf.data.TFRecordDataset([tfrecord_path])\
-                .map(parse_tfrecord,params.num_threads)\
-                .padded_batch(params.batch_size,padded_shapes)\
-                .prefetch(1) # pads with 0s: works for mels, mags, and indexes since vocab[0] is P
-
-    iterator = dataset.make_initializable_iterator()
-    indexes, mels, mags, mel_mask = iterator.get_next()
-
-    # indexes.set_shape((None,None))
-    mels.set_shape((None,None,params.F))
-    mags.set_shape((None,None,params.Fo))
-    mel_mask.set_shape((None,None,params.F))
-    logger.info('Created iterators over tensors of shape: {} {} {}, mask:{}'.format(
-            indexes.shape, mels.shape, mags.shape, mel_mask.shape
-        ))
-    # TODO: add a mask
-    batch = {'indexes':indexes,'mels':mels,'mags':mags,'mels_mask':mel_mask}
-    iterator_init_op = iterator.initializer
-
-    return batch, iterator_init_op, num_batch_train, num_batch_val
 

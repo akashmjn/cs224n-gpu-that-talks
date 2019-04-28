@@ -8,7 +8,8 @@ from tensorflow.python import debug as tf_debug
 
 from .model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
 from .utils import set_logger, Params, learning_rate_decay, get_timing_signal_1d
-from .data_load import load_data, get_batch, get_batch_prepro
+from .data_load import TFRecordDataloader, load_tokens_from_text
+
 
 class ModelGraph(object):
 
@@ -35,7 +36,7 @@ class ModelGraph(object):
     def _add_inference_op(self):
         pass
 
-    def _add_input_embeddings(self,transcripts):
+    def _add_input_embeddings(self,tokens):
         """
         Args:
             reuse (bool): indicates whether to use variables already defined (from checkpoints)   
@@ -45,11 +46,10 @@ class ModelGraph(object):
         with tf.variable_scope('InputEmbeddings'):
             # from Gehring et. al (2017), sizing e the same as d if input embedding is to be added
             e = self.params.d if self.params.local_encoding else self.params.e
-            vocab_size = len(self.params.vocab)
             # TODO: Add ability to make padding embedding zero
-            embedding_mat = tf.get_variable(name='char_embeddings',shape=[vocab_size,e],
+            embedding_mat = tf.get_variable(name='char_embeddings',shape=[self.vocab_size,e],
                 dtype=tf.float32,trainable=True)
-            L = tf.nn.embedding_lookup(embedding_mat,transcripts)
+            L = tf.nn.embedding_lookup(embedding_mat,tokens)
         return L
 
     def _add_text_encoder(self,L):
@@ -100,14 +100,17 @@ class ModelTrainGraph(ModelGraph):
 
     def _add_data_input(self):
         if self.params.prepro: # reading pre-processed data from .tfrecord (recommended) 
-            self.tfrecord_path = tf.constant(os.path.join(self.params.data_dir,'train.tfrecord'))
-            batch, self.iterator_init_op,self.num_train_batch, self.num_val_batch = get_batch_prepro(
-                    self.tfrecord_path,self.params,self.logger
-                ) 
-            self.transcripts, self.Y, self.Z, self.Y_mask = batch['indexes'], batch['mels'], batch['mags'], batch['mels_mask']
+            tfrecord_path = tf.constant(os.path.join(self.params.data_dir,'train.tfrecord'))
+            self.dataloader = TFRecordDataloader(self.params,tfrecord_path,self.logger)
+            self.iterator_init_op = self.dataloader.iterator_init_op
+            self.num_train_batch = self.dataloader.num_batch_train
+            self.num_val_batch = self.dataloader.num_batch_val
+            self.vocab_size = self.dataloader.vocab_size
+            batch = self.dataloader.get_batch()
+            self.tokens, self.Y, self.Z, self.Y_mask = batch['tokens'], batch['mels'], batch['mags'], batch['mels_mask']
             self.Y_stop_labels = 1 - self.Y_mask[:,:,0] # 0 when data exists, 1 when padded
         else:
-            self.transcripts, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)       
+            self.tokens, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(self.params,mode,self.logger)       
 
     def _add_loss_op(self):
         # compute loss (without guided attention loss for now)
@@ -179,7 +182,7 @@ class Text2MelTrainGraph(ModelTrainGraph):
     def _build(self):
         self.logger.info('Building training graph for Text2Mel ...')       
         self._add_data_input()
-        self.L = self._add_input_embeddings(self.transcripts)
+        self.L = self._add_input_embeddings(self.tokens)
         self.S = tf.pad(self.Y[:,:-1,:],[[0,0],[1,0],[0,0]]) # feedback input: one-prev-shifted target input) 
         self.K, self.V = self._add_text_encoder(self.L)
         self.Q = self._add_audio_encoder(self.S)
@@ -191,6 +194,10 @@ class Text2MelTrainGraph(ModelTrainGraph):
     def _add_additional_summaries(self):
         if self.params.attention_mode == 'guided':
             tf.summary.scalar('train/att_loss',self.att_loss)
+        
+        with tf.variable_scope('Dataloading'):
+            tf.summary.scalar('train/len_tokens',tf.shape(self.tokens)[1])
+            tf.summary.scalar('train/len_frames',tf.shape(self.Y)[1])
     
         with tf.variable_scope('GradSummaries'):
             embed_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,'InputEmbed')
@@ -253,7 +260,7 @@ class SynthesizeGraph(ModelGraph):
    
     def _add_data_input(self):
         self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
-        self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
+        self.tokens = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
         self.K_inp = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding 
         self.V_inp = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding
         self.t = tf.placeholder(dtype=tf.int32,shape=()) # current timestep (required for pos encodings)
@@ -270,7 +277,7 @@ class SynthesizeGraph(ModelGraph):
     def _build(self):
         self.logger.info("Building inference graph ...")
         # Add embeddings lookup 
-        self.L = self._add_input_embeddings(self.transcripts)
+        self.L = self._add_input_embeddings(self.tokens)
         self.K_pre, self.V_pre = self._add_text_encoder(self.L)
         self.Q = self._add_audio_encoder(self.S)
         # # Iteration t: qt = AudioEncBlock(S:t)[t], rt = Attention(qt,KV), Yt = AudioDecBlock(qt,rt)
@@ -317,10 +324,10 @@ class OldModelGraph(object):
                 batch, self.iterator_init_op,self.num_train_batch, self.num_val_batch = get_batch_prepro(
                         self.tfrecord_path,params,self.logger
                     ) 
-                self.transcripts, self.Y, self.Z, self.Y_mask = batch['indexes'], batch['mels'], batch['mags'], batch['mels_mask']
+                self.tokens, self.Y, self.Z, self.Y_mask = batch['indexes'], batch['mels'], batch['mags'], batch['mels_mask']
                 self.Y_stop_labels = 1 - self.Y_mask[:,:,0] # 0 when data exists, 1 when padded
             else:
-                self.transcripts, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)
+                self.tokens, self.Y, self.Z, self.fnames, self.num_train_batch = get_batch(params,mode,self.logger)
         if mode in ['train_text2mel','val_text2mel','synthesize']:
             self.build_text2mel(reuse=None) # TODO: maybe look at combined training?
         if mode in ['train_ssrn','val_ssrn','synthesize']:
@@ -362,7 +369,7 @@ class OldModelGraph(object):
         elif self.mode=='synthesize':
             self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
             # self.last_attended = tf.placeholder(dtype=tf.int32,shape=[self.params.batch_size]) # batch_size with int indexes 
-            self.transcripts = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
+            self.tokens = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
 
         self.add_input_embeddings(reuse)
         self.logger.info('Initialized input character embeddings with dim: {}'.format(self.L.shape))
@@ -388,11 +395,11 @@ class OldModelGraph(object):
         with tf.variable_scope('InputEmbeddings',reuse=reuse):
             # from Gehring et. al (2017), sizing e the same as d if input embedding is to be added
             e = self.params.d if self.params.local_encoding else self.params.e
-            vocab_size = len(self.params.vocab)
+            vocab_size = self.dataloader.vocab_size 
             # TODO: Add ability to make padding embedding zero
             embedding_mat = tf.get_variable(name='char_embeddings',shape=[vocab_size,e],
                 dtype=tf.float32,trainable=True)
-            self.L = tf.nn.embedding_lookup(embedding_mat,self.transcripts)
+            self.L = tf.nn.embedding_lookup(embedding_mat,self.tokens)
 
         return self.L
 
@@ -538,9 +545,5 @@ def test_graph_setup(mode='placeholder'):
 
 if __name__ == '__main__':
 
-    # test_graph_setup()
-    # params = Params('./runs/default/params.json')
-    # fpaths, text_lengths, texts = load_data(params)
-    # texts, mels, mags, fnames, num_batch = get_batch(params)
     tf.logging.set_verbosity(tf.logging.DEBUG)
     test_graph_setup('placeholder')

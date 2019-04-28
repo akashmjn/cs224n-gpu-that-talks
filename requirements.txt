@@ -1,3 +1,5 @@
 tqdm
 librosa
 matplotlib
+sentencepiece 
+tf_sentencepiece
