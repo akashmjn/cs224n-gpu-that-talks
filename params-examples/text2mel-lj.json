@@ -4,15 +4,15 @@
     "transcript_csv_path_train":"../data/LJSpeech-1-1/train.csv",
     "transcript_csv_path_val":"../data/LJSpeech-1-1/val.csv",
     "transcript_csv_sep":"|",
-    "log_dir":"./runs/text2mel_lr4e-4_posEnc_localEnc/",
+    "log_dir":"./runs/text2mel/lj-v1.0.1-120k",
     "prepro":true,
     "num_threads": 4,
-    "num_buckets": 4,
+    "num_buckets": 8,
     "Qbatch": 4,
 
-    "padding_token":"P",
-    "end_token":"E",
-    "vocab":"PE abcdefghijklmnopqrstuvwxyz'.?",
+    "spm_model":"../data/LJSpeech-1-1/spm250unnorm.model",
+    "spm_nbest":64,
+    "spm_alpha":0.1,
 
     "sampling_rate": 22050,
     "reduction_factor": 4,
@@ -24,7 +24,7 @@
     "hop_length": 256,
     "n_iter": 50,
 
-    "model_name": "M4PosEncLocalEnclr4e-4",
+    "model_name": "v2.0.1_lr4e-4",
     "max_N": 200,
     "max_T": 255,
     "e": 128,
@@ -44,7 +44,7 @@
     "l1_loss_weight": 5.0,
     "CE_loss_weight": 1.0,
     "batch_size": 16,
-    "num_steps": 140000,
+    "num_steps": 120000,
     "dropout_rate": 0.3,
     "grad_clip_value": 1.0,
 
