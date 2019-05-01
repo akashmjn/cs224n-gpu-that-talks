@@ -67,7 +67,7 @@ def track_stop_preds(stop_preds,stop_idxs,stop_flags,t):
     stop_preds = stop_preds > 0.0 
     for j,stop_pred in enumerate(stop_preds):
         if stop_pred and not stop_flags[j]: # encountering for first time
-            stop_idxs[j] = t-2              # compensate for silence padded to training batches
+            stop_idxs[j] = t              # compensate for silence padded to training batches
             stop_flags[j] = stop_pred
 
 def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref_db=30):
@@ -94,7 +94,7 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
     output_mag = np.zeros((n_batch,params.max_T,params.Fo))
     # create flags indicating if and where each input in batch has stopped
     stop_flags = np.array([False]*n_batch)
-    stop_idxs = np.zeros((n_batch,),dtype=int)
+    stop_idxs = np.ones((n_batch,),dtype=int)*params.max_T
     #last_attended = np.zeros((n_batch,))
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # use single GPUs available
@@ -105,7 +105,7 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
         restore_checkpoints(sess,m1_dir,m2_dir)
     
         ## Step1: Pre-compute text encoding (K, V) = TextEncBlock(character sequence) 
-        K, V = sess.run([g.K_pre,g.V_pre],{g.transcripts:input_arr})
+        K, V = sess.run([g.K_pre,g.V_pre],{g.tokens:input_arr})
 
         ## Step2: Iterate over t, qt = AudioEncBlock(S:t), rt = Attention(qt,KV), St = AudioDecBlock(qt,rt)
         # TODO: Fix constrained monotonic attention
@@ -124,11 +124,11 @@ def synthesize(m1_dir,m2_dir,sample_dir,n_iter=150,test_data=None,lines=None,ref
 
             # monotonic contrained attention softmax
             # model_preds, attn_out = sess.run([g.Yhat,g.A],
-            #     {g.S:prev_slice,g.transcripts:input_arr,g.last_attended:last_attended})
+            #     {g.S:prev_slice,g.tokens:input_arr,g.last_attended:last_attended})
             # last_attended += np.argmax(attn_out[:,-1,:],axis=1) # slicing out the last time frame, and moving attention window forward
             # last_attended = np.clip(last_attended,a_min=0,a_max=text_lengths-params.attn_window_size)
         # output_mag, attn_out = sess.run([g.Zhat,g.A],
-        #         {g.S:output_mel,g.transcripts:input_arr,g.last_attended:last_attended})
+        #         {g.S:output_mel,g.tokens:input_arr,g.last_attended:last_attended})
    
         ## Step3: Process complete utterance and invert Z = SSRN(Y:T)
         # print("Truncating. Stop idxs: {}".format(stop_idxs)) # truncate mels evenly

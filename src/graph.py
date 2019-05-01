@@ -4,6 +4,7 @@ import logging
 import os,sys
 import tensorflow as tf
 import numpy as np
+import sentencepiece as spm
 from tensorflow.python import debug as tf_debug
 
 from .model import TextEncBlock, AudioEncBlock, AudioDecBlock, AttentionBlock, SSRNBlock
@@ -259,6 +260,9 @@ class SynthesizeGraph(ModelGraph):
     # Z = SSRN(Y:T)
    
     def _add_data_input(self):
+        self.spm_model = spm.SentencePieceProcessor()
+        self.spm_model.Load(self.params.spm_model)
+        self.vocab_size = self.spm_model.GetPieceSize()
         self.S = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.F]) # mels generated so far
         self.tokens = tf.placeholder(dtype=tf.int32,shape=[None,None]) # int encoded input text to synthesize
         self.K_inp = tf.placeholder(dtype=tf.float32,shape=[None,None,self.params.d]) # pre-computed text encoding 
