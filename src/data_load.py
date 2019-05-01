@@ -81,7 +81,7 @@ class TFRecordDataloader(object):
         # one way: dataset = dataset.filter(lambda elem: tf.shape(elem)[0] < max_length)
         self.dataset = tf.data.TFRecordDataset([self.tfrecord_path])\
                     .map(self.parse_tfrecord,self.params.num_threads)\
-                    .apply(self._get_batching_func())\
+                    .apply(self._get_batching_func(self.params.dynamic_batch))\
                     .shuffle(self.num_batch_train//2)\
                     .prefetch(1) # pads with 0s: works for mels, mags, and indexes since vocab[0] is P
 
@@ -89,10 +89,11 @@ class TFRecordDataloader(object):
         self.iterator_init_op = self.iterator.initializer
         self.logger.info('Created dataset and iterators..')
     
-    def _get_batching_func(self):
+    def _get_batching_func(self,dynamic=False):
         """
         Makes params.num_buckets uniformly upto params.max_T length
-        batch_sizes adjusted with ref to middle bucket to keep no. of frames same 
+        dynamic: batch_sizes adjusted with ref to middle bucket to keep no. of frames same 
+                else, same batch size for all buckets
         """
         padded_shapes = (
                 tf.TensorShape([None]),
@@ -103,10 +104,16 @@ class TFRecordDataloader(object):
         bin_width = round(self.params.max_T//self.params.num_buckets)
         bucket_sizes = [ (i+1)*bin_width for i in range(self.params.num_buckets) ] 
         mid_bucket_size = bucket_sizes[len(bucket_sizes)//2]
-        batch_sizes = [ round(mid_bucket_size/s*self.params.batch_size) for s in [*bucket_sizes,bucket_sizes[-1]] ]
+
+        if dynamic:
+            batch_sizes = [ round(mid_bucket_size/s*self.params.batch_size) for s in [*bucket_sizes,bucket_sizes[-1]] ]
+        else:
+            batch_sizes = [self.params.batch_size]*(len(bucket_sizes)+1)
+
         bucketing_func = tf.data.experimental.bucket_by_sequence_length( # Use no. of mel frames to bucket
             lambda t,ml,mg,mlm: tf.shape(ml)[0],bucket_sizes,batch_sizes,padded_shapes=padded_shapes
         )
+        self.logger.info("Created bucketed batches. Bucket lengths: {}, Batch sizes: {}".format(bucket_sizes,batch_sizes))
         return bucketing_func
 
     def parse_tfrecord(self,serialized_inp):
