@@ -56,10 +56,10 @@ def _int64_feature(value):
 def _int64_list_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))   
 
-def process_to_tfrecord(params,input_path,csv_path,output_path): #TODO:SP
+def process_to_tfrecord(params,input_path,csv_path,output_path,text_col_num=1): #TODO:SP
     # TODO: Parallelize / multiprocess this
 
-    fpaths, text_lengths, transcriptions = process_csv_file(csv_path,params)
+    fpaths, text_lengths, transcriptions = process_csv_file(csv_path,params,text_col_num)
     # fpaths = [os.path.join(input_path,f) for f in fpaths]
 
     if 'train' in csv_path:
@@ -104,6 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('csv_path', help="Path to file with metadata: text, wav filename")
     parser.add_argument('output_path', help="Path to output folder that will contain mels, mags folders")
     parser.add_argument('--mode',default='tfrecord',help="Format to save processed data files npy/tfrecord (default)")
+    parser.add_argument('--text_col_num',type=int,default=1,help="Zero indexed column number of tsv containing transcription")
     args = parser.parse_args()
 
     params, output_path = Params(args.params_path),args.output_path
@@ -111,4 +112,4 @@ if __name__ == "__main__":
     if args.mode=='npy':
         process_to_npy(params,args.input_path,args.csv_path,args.output_path)
     elif args.mode=='tfrecord':
-        process_to_tfrecord(params,args.input_path,args.csv_path,args.output_path)
+        process_to_tfrecord(params,args.input_path,args.csv_path,args.output_path,args.text_col_num)

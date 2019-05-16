@@ -28,7 +28,7 @@ def tokenize():
     #TODO: Implement with tf_sentencepiece https://colab.research.google.com/drive/1rQ0tgXmHv02sMO6VdTO0yYaTvc1Yv1yP
     pass
 
-def process_csv_file(csv_path,params): #TODO:SP
+def process_csv_file(csv_path,params,text_col_num=1): #TODO:SP
     # Process text file containing file,labels
     # Returns file_paths, text_lengths, indexes (np.array of ints)
 
@@ -37,7 +37,8 @@ def process_csv_file(csv_path,params): #TODO:SP
 
     print('Processing csv file..')
     for line in lines:
-        fname, text = line.strip().split(params.transcript_csv_sep)[:2]
+        columns = line.strip().split(params.transcript_csv_sep)
+        fname, text = columns[0], columns[text_col_num]
         fpath = os.path.join(params.data_dir,'wavs',fname + ".wav")
         fpaths.append(fpath)
         text_lengths.append(len(text))
