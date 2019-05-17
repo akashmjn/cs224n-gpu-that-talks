@@ -62,6 +62,8 @@ class ModelGraph(object):
 
     def _add_audio_encoder(self,S):
         Q = AudioEncBlock(S,self.params.d)
+        if self.params.dropout_rate > 0:
+            Q = tf.nn.dropout(Q,1-self.params.dropout_rate)
         self.logger.info('Encoded input audio to Q with dim: {}'.format(Q.shape))       
         return Q
 
