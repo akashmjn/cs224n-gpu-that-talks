@@ -155,7 +155,7 @@ class ModelTrainGraph(ModelGraph):
             self.trainable_gvs = [(g,v) for g,v in self.gvs if v in self.trainable_vars]
             for grad, var in self.trainable_gvs:
                 try:
-                    grad = tf.clip_by_value(grad, -self.params.grad_clip_value, self.params.grad_clip_value)
+                    grad = tf.clip_by_norm(grad, self.params.grad_clip_value)
                     self.clipped.append((grad, var))
                 except Exception as e:
                     print(grad)
@@ -282,6 +282,7 @@ class SynthesizeGraph(ModelGraph):
     
     def _build(self):
         self.logger.info("Building inference graph ...")
+        self.params.dropout_rate = 0.0
         # Add embeddings lookup 
         self.L = self._add_input_embeddings(self.tokens)
         self.K_pre, self.V_pre = self._add_text_encoder(self.L)
