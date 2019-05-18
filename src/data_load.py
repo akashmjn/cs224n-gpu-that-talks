@@ -82,8 +82,8 @@ class TFRecordDataloader(object):
         # one way: dataset = dataset.filter(lambda elem: tf.shape(elem)[0] < max_length)
         self.dataset = tf.data.TFRecordDataset([self.tfrecord_path])\
                     .map(self.parse_tfrecord,self.params.num_threads)\
+                    .shuffle(10000)\
                     .apply(self._get_batching_func(self.params.dynamic_batch))\
-                    .shuffle(self.num_batch_train//2)\
                     .prefetch(1) # pads with 0s: works for mels, mags, and indexes since vocab[0] is P
 
         self.iterator = self.dataset.make_initializable_iterator()
