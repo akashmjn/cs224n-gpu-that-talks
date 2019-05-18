@@ -190,7 +190,7 @@ class Text2MelTrainGraph(ModelTrainGraph):
         self.K, self.V, self.Q, self.A, self.R = self._add_attention(self.K,self.V,self.Q)
         tf.summary.image('train/A', tf.expand_dims(tf.transpose(self.A[:1], [0, 2, 1]), -1))
         if self.params.dropout_rate > 0:
-            Q = tf.nn.dropout(Q,1-self.params.dropout_rate)
+            self.Q = tf.nn.dropout(self.Q,1-self.params.dropout_rate)
         self.Ylogit, self.Yhat, self.YStoplogit = self._add_audio_decoder(self.R,self.Q)
         self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
 
