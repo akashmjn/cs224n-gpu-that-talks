@@ -129,17 +129,7 @@ class ModelTrainGraph(ModelGraph):
                 )                                # stop predictions are not masked 
             self.loss = self.params.l1_loss_weight*self.L1_loss + self.params.CE_loss_weight*self.CE_loss + self.stop_loss
             self.logger.info('Added masked L1, CE and stop loss ops ...')
-
-            # guided attention loss from Tachibana et. al (2017)
-            if self.params.attention_mode =='guided' and 'ssrn' not in self.mode:
-                # A (shape: batch_size, N, T) - these dimensions are fixed for a single padded batch
-                N, T = tf.cast(tf.shape(self.A)[1],tf.float32), tf.cast(tf.shape(self.A)[2],tf.float32)
-                W = tf.fill(tf.shape(self.A),0.0) # weight matrix to be multiplied with A
-                W = W + tf.expand_dims(tf.range(N),1)/N - tf.expand_dims(tf.range(T),0)/T # using broadcasting for mat + col - row
-                self.W_att = 1.0 - tf.exp(-tf.square(W)/(2*0.2)**2) # using g=0.2 from paper
-                self.att_loss = tf.reduce_mean(tf.multiply(self.A,self.W_att))
-                self.loss = self.loss + self.att_loss
-                self.logger.info('Added guided attention loss over A: {}'.format(self.A))       
+            self._add_additional_penalties()
 
     def _add_train_op(self):
         with tf.variable_scope('optimizer'):
@@ -177,6 +167,9 @@ class ModelTrainGraph(ModelGraph):
 
     def _add_additional_summaries(self):
         pass
+    
+    def _add_additional_penalties(self):
+        pass
 
 class Text2MelTrainGraph(ModelTrainGraph):
 
@@ -194,10 +187,28 @@ class Text2MelTrainGraph(ModelTrainGraph):
         self.Ylogit, self.Yhat, self.YStoplogit = self._add_audio_decoder(self.R,self.Q)
         self.target, self.pred, self.logit, self._tboard_label = self.Y, self.Yhat, self.Ylogit, 'train/Y'
 
+    def _add_additional_penalties(self):
+        if self.params.attention_mode =='guided': # guided attention loss from Tachibana et. al (2017)
+            # A (shape: batch_size, N, T) - these dimensions are fixed for a single padded batch
+            N, T = tf.cast(tf.shape(self.A)[1],tf.float32), tf.cast(tf.shape(self.A)[2],tf.float32)
+            W = tf.fill(tf.shape(self.A),0.0) # weight matrix to be multiplied with A
+            W = W + tf.expand_dims(tf.range(N),1)/N - tf.expand_dims(tf.range(T),0)/T # using broadcasting for mat + col - row
+            self.W_att = 1.0 - tf.exp(-tf.square(W)/(2*0.2)**2) # using g=0.2 from paper
+            self.att_loss = tf.reduce_mean(tf.multiply(self.A,self.W_att))
+            self.loss = self.loss + self.att_loss
+            self.logger.info('Added guided attention loss over A: {}'.format(self.A.shape))       
+
+        elif self.params.attention_mode =='coverage': 
+            self.coverage_penalty = -tf.reduce_mean(tf.log(tf.minimum(tf.reduce_sum(self.A,axis=2),1.0)))
+            self.loss = self.loss + self.coverage_penalty
+            self.logger.info('Added coverage penalty over A: {}'.format(self.A.shape))       
+
     def _add_additional_summaries(self):
         if self.params.attention_mode == 'guided':
             tf.summary.scalar('train/att_loss',self.att_loss)
-        
+        elif self.params.attention_mode == 'coverage':
+            tf.summary.scalar('train/coverage_penalty',self.coverage_penalty)
+
         with tf.variable_scope('Dataloading'):
             tf.summary.scalar('train/len_tokens',tf.shape(self.tokens)[1])
             tf.summary.scalar('train/len_frames',tf.shape(self.Y)[1])
